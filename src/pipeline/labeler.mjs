@@ -19,7 +19,7 @@ export function deterministicLabels(video, folder) {
   for (const racer of roster) {
     const inTranscript = includesName(transcriptText, racer.name);
     const inFilename = includesName(filename.replace(/[_-]/g, " "), racer.name);
-    const bibMatch = racer.bib && new RegExp(`(^|[^0-9])0*${escapeRegExp(racer.bib)}([^0-9]|$)`).test(filename);
+    const bibMatch = racer.bib && filenameBibMatches(filename, racer.bib);
     const fuzzy = bestFuzzyRosterMatch(transcriptText, racer);
     const fuzzyMatch = fuzzy && fuzzy.score >= 0.76;
     if (!(inTranscript || inFilename || bibMatch || fuzzyMatch)) continue;
@@ -167,6 +167,13 @@ function mergeLabels(...groups) {
   return dedupeLabels(groups.flat()).sort((a, b) => b.confidence - a.confidence);
 }
 
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function filenameBibMatches(filename, bib) {
+  const target = String(bib || "").replace(/^0+/, "");
+  if (!target) return false;
+  const base = String(filename || "").replace(/\.[^.]+$/, "");
+  const candidates = [
+    ...base.matchAll(/\b(?:bib|b)[ _.-]*0*(\d{1,3})\b/gi),
+    ...base.matchAll(/(?:^|[^A-Za-z0-9])0*(\d{1,3})(?=$|[^A-Za-z0-9])/g)
+  ].map((match) => match[1].replace(/^0+/, ""));
+  return candidates.includes(target);
 }

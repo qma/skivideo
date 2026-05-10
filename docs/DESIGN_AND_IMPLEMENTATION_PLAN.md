@@ -246,12 +246,13 @@ Visual labels must not overwrite stronger manual or transcript labels.
 Current validation target:
 
 - Shared-link REST listing found the U14 `2025-2026` folders.
-- Oldest folder by SharePoint `TimeCreated`: `GS Dec 30, 2025`.
-- Folder manifest contains 56 MP4 files.
-- Smallest validation clip: `P1000031.MP4`.
-- Second validation clip: `P1000032.MP4`.
-- Both clips were downloaded, audio-extracted with the static `imageio-ffmpeg` binary, and transcribed locally with MLX Whisper.
-- Both clips currently produce the single-word transcript callout `Claydon`, stored as a low-confidence review label until a roster or manual correction provides a canonical full name.
+- `GS Dec 30, 2025` was validated as a practice folder and is no longer the race validation target because Live-Timing may not have an official event for it.
+- Current race validation folder: `GS Race Jan 9. Northstar. Day 1`.
+- Folder manifest contains 117 MP4 files.
+- Live-Timing daily archive for `2026-01-09` correlates this folder to two sibling races: `297661` men and `297652` women, both Northstar Resort Giant Slalom / CA Challenge Series.
+- Live-Timing race-data AJAX payloads provide 160 candidate racers, including 74 TPT/TPTA racers, for fuzzy transcript label correction.
+- Initial processed clip `P1000251.MP4` downloads from SharePoint, extracts audio with the static `imageio-ffmpeg` binary, transcribes locally with MLX Whisper, stores the full transcript artifact separately, and labels `Jack Baker` from transcript text `Jack, run one.`.
+- Two additional small clips processed cleanly but remain `needs_review` because the transcript did not contain a usable athlete name.
 
 ### Batch Mode
 
@@ -306,7 +307,7 @@ Core views:
 ### Phase 2: Event Source Adapters
 
 - Implement Far West page fetch/parser.
-- Implement Live-Timing search/result asset fetch hooks.
+- Implement Live-Timing search, daily archive, race page, and AJAX race-data fetch hooks.
 - Implement folder-to-event matching heuristics.
 - Store event matches and candidate rosters.
 

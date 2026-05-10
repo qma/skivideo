@@ -4,7 +4,7 @@ import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
-import { fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingSearch, matchFolderToLiveTimingRace, matchFoldersToEvents } from "./adapters/events.mjs";
+import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingRaceData, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, processVideo } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
@@ -24,6 +24,7 @@ async function main(cmd, args) {
   if (cmd === "fetch-events") return fetchEvents();
   if (cmd === "fetch-live-timing") return fetchLiveTiming(args.join(" "));
   if (cmd === "fetch-live-timing-day") return fetchLiveTimingDay(args[0]);
+  if (cmd === "fetch-live-timing-race") return fetchLiveTimingRace(args[0]);
   if (cmd === "correlate-folder-live-timing") return correlateFolderLiveTiming(args[0]);
   if (cmd === "list-sharepoint") return listSharePoint();
   if (cmd === "list-sharepoint-rest") return listSharePointRest();
@@ -73,59 +74,41 @@ async function fetchLiveTimingDay(date) {
   });
 }
 
+async function fetchLiveTimingRace(raceId) {
+  const result = await fetchLiveTimingRaceData(config, raceId);
+  printJson({
+    sourceUrl: result.sourceUrl,
+    rawPath: result.rawPath,
+    race: result.race,
+    roster: result.roster.length,
+    tptRoster: result.roster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length
+  });
+}
+
 async function correlateFolderLiveTiming(folderId) {
   if (!folderId) throw new Error("Folder id is required.");
   const state = await store.read();
   const folder = state.folders.find((item) => item.id === folderId);
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
-  const query = [
-    folder.eventMatch?.date,
-    folder.eventMatch?.venue,
-    folder.eventMatch?.discipline,
-    folder.name
-  ].filter(Boolean).join(" ");
-  const result = await fetchLiveTimingSearch(config, query);
-  const daily = folder.eventMatch?.date ? await fetchLiveTimingDailyRaces(config, folder.eventMatch.date) : null;
-  const dailyMatch = daily ? matchFolderToLiveTimingRace(folder, daily.races) : null;
-  const assets = [
-    {
-      type: "live_timing_search",
-      label: `Live-Timing search: ${query}`,
-      sourceUrl: result.sourceUrl,
-      localPath: result.rawPath
-    },
-    ...(daily ? [{
-      type: "live_timing_daily_archive",
-      label: `Live-Timing daily archive: ${folder.eventMatch.date}`,
-      sourceUrl: daily.sourceUrl,
-      localPath: daily.rawPath
-    }] : []),
-    ...(dailyMatch ? [
-      {
-        type: "race_page",
-        label: `${dailyMatch.race.resort} - ${dailyMatch.race.name}`,
-        sourceUrl: dailyMatch.race.sourceUrl,
-        localPath: ""
-      },
-      ...dailyMatch.race.reports
-    ] : []),
-    ...result.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
-  ];
+  const correlation = await correlateFolderWithLiveTiming(config, folder);
   await store.updateFolder(folderId, {
-    raceAssets: assets,
+    candidateRoster: correlation.candidateRoster,
+    raceAssets: correlation.assets,
     eventMatch: {
       ...(folder.eventMatch || {}),
-      liveTimingMatch: dailyMatch ? {
-        raceId: dailyMatch.race.raceId,
-        name: dailyMatch.race.name,
-        resort: dailyMatch.race.resort,
-        confidence: dailyMatch.confidence,
-        sourceUrl: dailyMatch.race.sourceUrl
-      } : null,
-      sources: [...new Set([...(folder.eventMatch?.sources || []), result.sourceUrl])]
+      liveTimingMatch: correlation.liveTimingMatches[0] ? serializeLiveTimingMatch(correlation.liveTimingMatches[0]) : null,
+      liveTimingMatches: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+      sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
     }
   });
-  printJson({ folderId, query, assets });
+  printJson({
+    folderId,
+    query: correlation.query,
+    races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+    candidateRoster: correlation.candidateRoster.length,
+    tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
+    assets: correlation.assets
+  });
 }
 
 async function listSharePoint() {
@@ -217,6 +200,7 @@ Commands:
   fetch-events
   fetch-live-timing [query]
   fetch-live-timing-day <YYYY-MM-DD>
+  fetch-live-timing-race <raceId>
   correlate-folder-live-timing <folderId>
   list-sharepoint
   list-sharepoint-rest
@@ -233,4 +217,17 @@ Commands:
 
 function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
+}
+
+function serializeLiveTimingMatch(match) {
+  return {
+    raceId: match.race.raceId,
+    name: match.race.name,
+    gender: match.race.gender,
+    type: match.race.type,
+    resort: match.race.resort,
+    date: match.race.date,
+    confidence: match.confidence,
+    sourceUrl: match.race.sourceUrl
+  };
 }

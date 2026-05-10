@@ -51,7 +51,10 @@ export class JsonStore {
   async upsertFolders(folders) {
     const store = await this.read();
     const byId = new Map(store.folders.map((folder) => [folder.id, folder]));
-    for (const folder of folders) byId.set(folder.id, { ...byId.get(folder.id), ...folder });
+    for (const folder of folders) {
+      const existing = byId.get(folder.id);
+      byId.set(folder.id, mergeFolder(existing, folder));
+    }
     store.folders = [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
     return this.write(store);
   }
@@ -128,6 +131,19 @@ export class JsonStore {
 function snippet(text, maxLength) {
   const value = String(text || "");
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function mergeFolder(existing = {}, incoming = {}) {
+  const merged = { ...existing, ...incoming };
+  for (const key of ["candidateRoster", "raceAssets"]) {
+    if (Array.isArray(incoming[key]) && incoming[key].length === 0 && Array.isArray(existing[key]) && existing[key].length > 0) {
+      merged[key] = existing[key];
+    }
+  }
+  if (incoming.eventMatch && existing.eventMatch) {
+    merged.eventMatch = deepMerge(existing.eventMatch, incoming.eventMatch);
+  }
+  return merged;
 }
 
 function deepMerge(base, patch) {

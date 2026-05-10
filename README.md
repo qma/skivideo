@@ -20,7 +20,7 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 - Manual/sample manifest import.
 - Microsoft Graph adapter for SharePoint listing when credentials are configured.
 - Far West U14 calendar fetch hook and basic parser.
-- Live-Timing search hook and asset model.
+- Live-Timing daily archive and race-data parsing, including men/women sibling race correlation and racer roster import.
 - Event-to-folder matching heuristics.
 - Transcript source normalization.
 - Deterministic roster/transcript/filename athlete labeler.
@@ -37,6 +37,8 @@ npm run cli -- fetch-events
 npm run cli -- list-sharepoint
 npm run cli -- list-sharepoint-rest
 npm run cli -- ingest-oldest-sharepoint-folder
+npm run cli -- fetch-live-timing-day <YYYY-MM-DD>
+npm run cli -- fetch-live-timing-race <raceId>
 npm run cli -- correlate-folder-live-timing <folderId>
 npm run cli -- process-folder sample-folder-palisades-u14-gs
 npm run cli -- process-video <videoId>
@@ -44,7 +46,7 @@ npm run cli -- export-lean
 npm run cli -- search "Jane"
 ```
 
-For the provided Team Palisades shared link, `list-sharepoint-rest` works without Graph credentials by establishing the anonymous shared-link SharePoint session and calling SharePoint REST endpoints. The first validation folder selected by creation date is `GS Dec 30, 2025`.
+For the provided Team Palisades shared link, `list-sharepoint-rest` works without Graph credentials by establishing the anonymous shared-link SharePoint session and calling SharePoint REST endpoints. The current real validation folder is `GS Race Jan 9. Northstar. Day 1`, correlated to Live-Timing races `297661` (men) and `297652` (women).
 
 ## Data Layout
 

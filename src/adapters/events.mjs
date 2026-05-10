@@ -90,11 +90,141 @@ export async function fetchLiveTimingDailyRaces(config, date) {
   };
 }
 
+export async function fetchLiveTimingRaceData(config, raceId) {
+  if (!raceId) throw new Error("Live-Timing race id is required.");
+  const url = `${liveTimingOrigin}/includes/aj_race.php?${new URLSearchParams({ r: raceId, m: "0", u: "60" })}`;
+  const response = await fetch(url, {
+    headers: { "user-agent": "ski-video-companion/0.1" }
+  });
+  if (!response.ok) throw new Error(`Live-Timing race data fetch failed: ${response.status}`);
+  const text = await response.text();
+  const rawPath = path.join(config.rawDir, "live-timing", `race-${raceId}.txt`);
+  await fs.mkdir(path.dirname(rawPath), { recursive: true });
+  await fs.writeFile(rawPath, text);
+  return {
+    sourceUrl: url,
+    rawPath,
+    ...parseLiveTimingRacePayload(text, url)
+  };
+}
+
+export async function correlateFolderWithLiveTiming(config, folder) {
+  const query = [
+    folder.eventMatch?.date,
+    folder.eventMatch?.venue,
+    folder.eventMatch?.discipline,
+    folder.name
+  ].filter(Boolean).join(" ");
+  const search = await fetchLiveTimingSearch(config, query);
+  const daily = folder.eventMatch?.date ? await fetchLiveTimingDailyRaces(config, folder.eventMatch.date) : null;
+  const liveTimingMatches = daily ? matchFolderToLiveTimingRaces(folder, daily.races) : [];
+  const raceData = [];
+  for (const match of liveTimingMatches) {
+    try {
+      raceData.push({ match, data: await fetchLiveTimingRaceData(config, match.race.raceId) });
+    } catch (error) {
+      raceData.push({ match, error: error.message });
+    }
+  }
+  const candidateRoster = dedupeRoster(raceData.flatMap(({ match, data }) => (data?.roster || []).map((racer) => ({
+    ...racer,
+    raceId: match.race.raceId,
+    raceGender: match.race.gender,
+    raceName: match.race.name,
+    raceSourceUrl: match.race.sourceUrl
+  }))));
+  const raceAssets = raceData.flatMap(({ match, data, error }) => [
+    {
+      type: "race_page",
+      label: `${match.race.resort} - ${match.race.gender} - ${match.race.name}`,
+      sourceUrl: match.race.sourceUrl,
+      localPath: ""
+    },
+    {
+      type: "live_timing_race_data",
+      label: `Live-Timing race data: ${match.race.raceId}`,
+      sourceUrl: data?.sourceUrl || `${liveTimingOrigin}/includes/aj_race.php?r=${match.race.raceId}`,
+      localPath: data?.rawPath || "",
+      error: error || undefined
+    },
+    ...match.race.reports
+  ]);
+  const assets = [
+    {
+      type: "live_timing_search",
+      label: `Live-Timing search: ${query}`,
+      sourceUrl: search.sourceUrl,
+      localPath: search.rawPath
+    },
+    ...(daily ? [{
+      type: "live_timing_daily_archive",
+      label: `Live-Timing daily archive: ${folder.eventMatch.date}`,
+      sourceUrl: daily.sourceUrl,
+      localPath: daily.rawPath
+    }] : []),
+    ...raceAssets,
+    ...search.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
+  ];
+  return {
+    query,
+    assets,
+    candidateRoster,
+    liveTimingMatches,
+    daily,
+    search
+  };
+}
+
 export function parseLiveTimingDailyRaces(text, sourceUrl = liveTimingOrigin) {
   return String(text || "")
     .split("~")
     .map((chunk) => parseLiveTimingRaceRecord(chunk, sourceUrl))
     .filter(Boolean);
+}
+
+export function parseLiveTimingRacePayload(text, sourceUrl = liveTimingOrigin) {
+  const fields = {};
+  const roster = [];
+  let current = null;
+  for (const part of String(text || "").split("|")) {
+    const index = part.indexOf("=");
+    if (index < 0) continue;
+    const key = part.slice(0, index);
+    const value = part.slice(index + 1);
+    if (key.startsWith("h")) {
+      fields[key] = value;
+      continue;
+    }
+    if (key === "b") {
+      if (current) roster.push(current);
+      current = {
+        bib: value,
+        name: "",
+        rawName: "",
+        team: "",
+        club: "",
+        category: "",
+        ussaNumber: "",
+        sourceUrl
+      };
+      continue;
+    }
+    if (!current) continue;
+    if (key === "m") {
+      current.rawName = value;
+      current.name = canonicalLiveTimingName(value);
+    } else if (key === "t") current.team = value;
+    else if (key === "c") current.club = value.trim();
+    else if (key === "s") current.category = value;
+    else if (key === "un") current.ussaNumber = value;
+    else if (key === "ltID") current.liveTimingMemberId = value;
+  }
+  if (current) roster.push(current);
+  const raceRecord = parseLiveTimingRaceRecord(Object.entries(fields).map(([key, value]) => `${key}=${value}`).join("|"), sourceUrl);
+  return {
+    race: raceRecord,
+    roster: roster.filter((racer) => racer.name || racer.rawName)
+  };
 }
 
 export function parseLiveTimingAssets(html, sourceUrl = liveTimingRacesUrl) {
@@ -140,17 +270,22 @@ export function matchFoldersToEvents(folders, events) {
 }
 
 export function matchFolderToLiveTimingRace(folder, races) {
-  let best = null;
-  for (const race of races) {
-    const score = scoreFolderEventMatch(`${folder.name} ${folder.path}`, {
-      name: race.name,
-      venue: race.resort,
-      date: race.date,
-      discipline: race.type
-    });
-    if (!best || score > best.confidence) best = { race, confidence: Number(score.toFixed(2)) };
-  }
+  const [best] = matchFolderToLiveTimingRaces(folder, races, { includeSiblingGenders: false });
   return best && best.confidence >= 0.2 ? best : null;
+}
+
+export function matchFolderToLiveTimingRaces(folder, races, options = {}) {
+  const includeSiblingGenders = options.includeSiblingGenders !== false;
+  const scored = races
+    .map((race) => ({ race, confidence: Number(scoreFolderLiveTimingRace(folder, race).toFixed(2)) }))
+    .filter((match) => match.confidence >= 0.55)
+    .sort((a, b) => b.confidence - a.confidence || String(a.race.gender).localeCompare(String(b.race.gender)));
+  if (!scored.length) return [];
+  if (includeSiblingGenders) {
+    const best = scored[0].confidence;
+    return scored.filter((match) => best - match.confidence <= 0.12);
+  }
+  return [scored[0]];
 }
 
 export function parseRosterFromText(text, sourceUrl = "") {
@@ -197,6 +332,56 @@ function inferDiscipline(context) {
   if (/\bsg\b|super g/.test(normalized)) return "SG";
   if (/\bdh\b|downhill/.test(normalized)) return "DH";
   return "";
+}
+
+function scoreFolderLiveTimingRace(folder, race) {
+  const folderText = normalizeText(`${folder.name} ${folder.path}`);
+  const eventMatch = folder.eventMatch || {};
+  const base = scoreFolderEventMatch(`${folder.name} ${folder.path}`, {
+    name: race.name,
+    venue: race.resort,
+    date: race.date,
+    discipline: race.type
+  });
+  const venueScore = eventMatch.venue && normalizeText(race.resort).includes(normalizeText(eventMatch.venue)) ? 0.28 : 0;
+  const dateScore = eventMatch.date && race.date === eventMatch.date ? 0.3 : 0;
+  const disciplineScore = disciplineMatches(eventMatch.discipline || folderText, race.type) ? 0.24 : 0;
+  const nameScore = normalizeText(race.name).split(" ").some((token) => token.length > 3 && folderText.includes(token)) ? 0.08 : 0;
+  return Math.min(1, base + venueScore + dateScore + disciplineScore + nameScore);
+}
+
+function disciplineMatches(folderDiscipline, raceType) {
+  const folder = normalizeText(folderDiscipline);
+  const race = normalizeText(raceType);
+  if (!folder || !race) return false;
+  if (folder.includes("giant slalom") || /\bgs\b/.test(folder)) return race.includes("giant slalom");
+  if (folder.includes("slalom") || /\bsl\b/.test(folder)) return race.includes("slalom") && !race.includes("giant");
+  if (folder.includes("super g") || /\bsg\b/.test(folder)) return race.includes("super g");
+  return folder.split(" ").some((token) => token.length > 2 && race.includes(token));
+}
+
+function canonicalLiveTimingName(name) {
+  const value = String(name || "").trim();
+  const [last, first] = value.split(",").map((part) => part.trim());
+  return first && last ? `${first} ${last}` : value;
+}
+
+function dedupeRoster(roster) {
+  const byKey = new Map();
+  for (const racer of roster) {
+    const key = racer.ussaNumber || `${normalizeText(racer.name)}:${racer.bib}:${racer.raceId}`;
+    if (!byKey.has(key)) byKey.set(key, racer);
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const aTpt = isTptRacer(a) ? 0 : 1;
+    const bTpt = isTptRacer(b) ? 0 : 1;
+    return aTpt - bTpt || String(a.name).localeCompare(String(b.name));
+  });
+}
+
+function isTptRacer(racer) {
+  return /^(TPT|TPTA)$/i.test(String(racer.team || "").trim())
+    || /team palis/i.test(String(racer.club || ""));
 }
 
 function inferAssetType(label, href) {

@@ -5,7 +5,7 @@ import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
-import { fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingSearch, matchFolderToLiveTimingRace, matchFoldersToEvents } from "./adapters/events.mjs";
+import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
@@ -59,54 +59,26 @@ async function routeApi(req, url) {
     const state = await store.read();
     const folder = state.folders.find((item) => item.id === body.folderId);
     if (!folder) throw new Error(`Folder not found: ${body.folderId}`);
-    const query = [
-      folder.eventMatch?.date,
-      folder.eventMatch?.venue,
-      folder.eventMatch?.discipline,
-      folder.name
-    ].filter(Boolean).join(" ");
-    const result = await fetchLiveTimingSearch(config, query);
-    const daily = folder.eventMatch?.date ? await fetchLiveTimingDailyRaces(config, folder.eventMatch.date) : null;
-    const dailyMatch = daily ? matchFolderToLiveTimingRace(folder, daily.races) : null;
-    const assets = [
-      {
-        type: "live_timing_search",
-        label: `Live-Timing search: ${query}`,
-        sourceUrl: result.sourceUrl,
-        localPath: result.rawPath
-      },
-      ...(daily ? [{
-        type: "live_timing_daily_archive",
-        label: `Live-Timing daily archive: ${folder.eventMatch.date}`,
-        sourceUrl: daily.sourceUrl,
-        localPath: daily.rawPath
-      }] : []),
-      ...(dailyMatch ? [
-        {
-          type: "race_page",
-          label: `${dailyMatch.race.resort} - ${dailyMatch.race.name}`,
-          sourceUrl: dailyMatch.race.sourceUrl,
-          localPath: ""
-        },
-        ...dailyMatch.race.reports
-      ] : []),
-      ...result.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
-    ];
+    const correlation = await correlateFolderWithLiveTiming(config, folder);
     await store.updateFolder(body.folderId, {
-      raceAssets: assets,
+      candidateRoster: correlation.candidateRoster,
+      raceAssets: correlation.assets,
       eventMatch: {
         ...(folder.eventMatch || {}),
-        liveTimingMatch: dailyMatch ? {
-          raceId: dailyMatch.race.raceId,
-          name: dailyMatch.race.name,
-          resort: dailyMatch.race.resort,
-          confidence: dailyMatch.confidence,
-          sourceUrl: dailyMatch.race.sourceUrl
-        } : null,
-        sources: [...new Set([...(folder.eventMatch?.sources || []), result.sourceUrl])]
+        liveTimingMatch: correlation.liveTimingMatches[0] ? serializeLiveTimingMatch(correlation.liveTimingMatches[0]) : null,
+        liveTimingMatches: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+        sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
       }
     });
-    return { ok: true, folderId: body.folderId, query, assets };
+    return {
+      ok: true,
+      folderId: body.folderId,
+      query: correlation.query,
+      races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+      candidateRoster: correlation.candidateRoster.length,
+      tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
+      assets: correlation.assets
+    };
   }
   if (req.method === "POST" && url.pathname === "/api/list-sharepoint") {
     const folders = await listRootEventFolders(config);
@@ -193,5 +165,18 @@ function countStore(state) {
     folders: state.folders?.length || 0,
     events: state.events?.length || 0,
     videos: state.videos?.length || 0
+  };
+}
+
+function serializeLiveTimingMatch(match) {
+  return {
+    raceId: match.race.raceId,
+    name: match.race.name,
+    gender: match.race.gender,
+    type: match.race.type,
+    resort: match.race.resort,
+    date: match.race.date,
+    confidence: match.confidence,
+    sourceUrl: match.race.sourceUrl
   };
 }
