@@ -5,7 +5,7 @@ import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
-import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
+import { fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingSearch, matchFolderToLiveTimingRace, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
@@ -66,6 +66,8 @@ async function routeApi(req, url) {
       folder.name
     ].filter(Boolean).join(" ");
     const result = await fetchLiveTimingSearch(config, query);
+    const daily = folder.eventMatch?.date ? await fetchLiveTimingDailyRaces(config, folder.eventMatch.date) : null;
+    const dailyMatch = daily ? matchFolderToLiveTimingRace(folder, daily.races) : null;
     const assets = [
       {
         type: "live_timing_search",
@@ -73,12 +75,34 @@ async function routeApi(req, url) {
         sourceUrl: result.sourceUrl,
         localPath: result.rawPath
       },
+      ...(daily ? [{
+        type: "live_timing_daily_archive",
+        label: `Live-Timing daily archive: ${folder.eventMatch.date}`,
+        sourceUrl: daily.sourceUrl,
+        localPath: daily.rawPath
+      }] : []),
+      ...(dailyMatch ? [
+        {
+          type: "race_page",
+          label: `${dailyMatch.race.resort} - ${dailyMatch.race.name}`,
+          sourceUrl: dailyMatch.race.sourceUrl,
+          localPath: ""
+        },
+        ...dailyMatch.race.reports
+      ] : []),
       ...result.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
     ];
     await store.updateFolder(body.folderId, {
       raceAssets: assets,
       eventMatch: {
         ...(folder.eventMatch || {}),
+        liveTimingMatch: dailyMatch ? {
+          raceId: dailyMatch.race.raceId,
+          name: dailyMatch.race.name,
+          resort: dailyMatch.race.resort,
+          confidence: dailyMatch.confidence,
+          sourceUrl: dailyMatch.race.sourceUrl
+        } : null,
         sources: [...new Set([...(folder.eventMatch?.sources || []), result.sourceUrl])]
       }
     });

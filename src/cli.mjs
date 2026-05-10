@@ -4,7 +4,7 @@ import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
-import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
+import { fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingSearch, matchFolderToLiveTimingRace, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, processVideo } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
@@ -23,6 +23,7 @@ async function main(cmd, args) {
   if (cmd === "ingest-manifest") return ingestManifest(args[0]);
   if (cmd === "fetch-events") return fetchEvents();
   if (cmd === "fetch-live-timing") return fetchLiveTiming(args.join(" "));
+  if (cmd === "fetch-live-timing-day") return fetchLiveTimingDay(args[0]);
   if (cmd === "correlate-folder-live-timing") return correlateFolderLiveTiming(args[0]);
   if (cmd === "list-sharepoint") return listSharePoint();
   if (cmd === "list-sharepoint-rest") return listSharePointRest();
@@ -63,6 +64,15 @@ async function fetchLiveTiming(query) {
   printJson(result);
 }
 
+async function fetchLiveTimingDay(date) {
+  const result = await fetchLiveTimingDailyRaces(config, date);
+  printJson({
+    sourceUrl: result.sourceUrl,
+    rawPath: result.rawPath,
+    races: result.races
+  });
+}
+
 async function correlateFolderLiveTiming(folderId) {
   if (!folderId) throw new Error("Folder id is required.");
   const state = await store.read();
@@ -75,6 +85,8 @@ async function correlateFolderLiveTiming(folderId) {
     folder.name
   ].filter(Boolean).join(" ");
   const result = await fetchLiveTimingSearch(config, query);
+  const daily = folder.eventMatch?.date ? await fetchLiveTimingDailyRaces(config, folder.eventMatch.date) : null;
+  const dailyMatch = daily ? matchFolderToLiveTimingRace(folder, daily.races) : null;
   const assets = [
     {
       type: "live_timing_search",
@@ -82,12 +94,34 @@ async function correlateFolderLiveTiming(folderId) {
       sourceUrl: result.sourceUrl,
       localPath: result.rawPath
     },
+    ...(daily ? [{
+      type: "live_timing_daily_archive",
+      label: `Live-Timing daily archive: ${folder.eventMatch.date}`,
+      sourceUrl: daily.sourceUrl,
+      localPath: daily.rawPath
+    }] : []),
+    ...(dailyMatch ? [
+      {
+        type: "race_page",
+        label: `${dailyMatch.race.resort} - ${dailyMatch.race.name}`,
+        sourceUrl: dailyMatch.race.sourceUrl,
+        localPath: ""
+      },
+      ...dailyMatch.race.reports
+    ] : []),
     ...result.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
   ];
   await store.updateFolder(folderId, {
     raceAssets: assets,
     eventMatch: {
       ...(folder.eventMatch || {}),
+      liveTimingMatch: dailyMatch ? {
+        raceId: dailyMatch.race.raceId,
+        name: dailyMatch.race.name,
+        resort: dailyMatch.race.resort,
+        confidence: dailyMatch.confidence,
+        sourceUrl: dailyMatch.race.sourceUrl
+      } : null,
       sources: [...new Set([...(folder.eventMatch?.sources || []), result.sourceUrl])]
     }
   });
@@ -182,6 +216,7 @@ Commands:
   ingest-manifest <path>
   fetch-events
   fetch-live-timing [query]
+  fetch-live-timing-day <YYYY-MM-DD>
   correlate-folder-live-timing <folderId>
   list-sharepoint
   list-sharepoint-rest

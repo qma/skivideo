@@ -5,6 +5,7 @@ import { normalizeText, scoreFolderEventMatch } from "../lib/text.mjs";
 
 export const farWestU14Url = "https://fwskiing.org/events/u14-schedule-results/";
 export const liveTimingRacesUrl = "https://live-timing.com/races.php";
+export const liveTimingOrigin = "https://www.live-timing.com";
 
 export async function fetchFarWestU14Events(config) {
   const response = await fetch(farWestU14Url, {
@@ -70,6 +71,32 @@ export async function fetchLiveTimingSearch(config, query = "") {
   };
 }
 
+export async function fetchLiveTimingDailyRaces(config, date) {
+  const normalized = normalizeIsoDate(date);
+  if (!normalized) throw new Error(`Invalid Live-Timing date: ${date}`);
+  const url = `${liveTimingOrigin}/dailyRaces/${normalized.slice(0, 4)}/races_${normalized}.txt`;
+  const response = await fetch(url, {
+    headers: { "user-agent": "ski-video-companion/0.1" }
+  });
+  if (!response.ok) throw new Error(`Live-Timing daily race fetch failed: ${response.status}`);
+  const text = await response.text();
+  const rawPath = path.join(config.rawDir, "live-timing", `daily-races-${normalized}.txt`);
+  await fs.mkdir(path.dirname(rawPath), { recursive: true });
+  await fs.writeFile(rawPath, text);
+  return {
+    sourceUrl: url,
+    rawPath,
+    races: parseLiveTimingDailyRaces(text, url)
+  };
+}
+
+export function parseLiveTimingDailyRaces(text, sourceUrl = liveTimingOrigin) {
+  return String(text || "")
+    .split("~")
+    .map((chunk) => parseLiveTimingRaceRecord(chunk, sourceUrl))
+    .filter(Boolean);
+}
+
 export function parseLiveTimingAssets(html, sourceUrl = liveTimingRacesUrl) {
   const assets = [];
   const linkPattern = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -110,6 +137,20 @@ export function matchFoldersToEvents(folders, events) {
     }
     return { ...folder, eventMatch: best && best.confidence > 0.15 ? best : folder.eventMatch };
   });
+}
+
+export function matchFolderToLiveTimingRace(folder, races) {
+  let best = null;
+  for (const race of races) {
+    const score = scoreFolderEventMatch(`${folder.name} ${folder.path}`, {
+      name: race.name,
+      venue: race.resort,
+      date: race.date,
+      discipline: race.type
+    });
+    if (!best || score > best.confidence) best = { race, confidence: Number(score.toFixed(2)) };
+  }
+  return best && best.confidence >= 0.2 ? best : null;
 }
 
 export function parseRosterFromText(text, sourceUrl = "") {
@@ -182,4 +223,59 @@ function dedupeEvents(events) {
     if (!seen.has(key)) seen.set(key, event);
   }
   return [...seen.values()];
+}
+
+function parseLiveTimingRaceRecord(chunk, sourceUrl) {
+  if (!chunk.includes("hID=")) return null;
+  const fields = {};
+  const reports = [];
+  for (const part of chunk.split("|")) {
+    const index = part.indexOf("=");
+    if (index < 0) continue;
+    const key = part.slice(0, index);
+    const value = part.slice(index + 1);
+    if (key === "hP") {
+      const [id, ...labelParts] = value.split("=");
+      reports.push({ id, label: labelParts.join("=") });
+    } else {
+      fields[key] = value;
+    }
+  }
+  const [source, name] = String(fields.hN || "").split("=").slice(-2);
+  const [type, gender] = String(fields.hT || "").split("=");
+  const [country, state] = String(fields.hC || "").split("=");
+  const raceId = fields.hID;
+  return {
+    id: `live_timing_${raceId}`,
+    raceId,
+    source,
+    name,
+    type,
+    gender,
+    country,
+    state,
+    resort: fields.hR || "",
+    start: fields.hST || "",
+    date: normalizeLiveTimingDate(fields.hST),
+    status: fields.hZ || "",
+    sourceUrl: `${liveTimingOrigin}/race2.php?r=${raceId}`,
+    reports: reports.map((report) => ({
+      ...report,
+      type: inferAssetType(report.label, report.id),
+      sourceUrl: report.id === "pdf"
+        ? `${liveTimingOrigin}/report/${raceId} ${encodeURIComponent(report.label)}.pdf`
+        : `${liveTimingOrigin}/report.php?r=${raceId}&rp=${encodeURIComponent(report.id)}`
+    })),
+    rawSourceUrl: sourceUrl
+  };
+}
+
+function normalizeIsoDate(date) {
+  const parsed = Date.parse(date);
+  return Number.isNaN(parsed) ? "" : new Date(parsed).toISOString().slice(0, 10);
+}
+
+function normalizeLiveTimingDate(value) {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? "" : new Date(parsed).toISOString().slice(0, 10);
 }
