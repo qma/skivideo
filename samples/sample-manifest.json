@@ -1,0 +1,92 @@
+{
+  "folders": [
+    {
+      "id": "sample-folder-palisades-u14-gs",
+      "source": "sample",
+      "name": "2026-01-15 Palisades U14 GS",
+      "path": "Team Palisades/2026-01-15 Palisades U14 GS",
+      "sharepointUrl": "https://alterramtnco.sharepoint.com/sample/palisades-u14-gs",
+      "discoveredAt": "2026-05-10T00:00:00.000Z",
+      "eventMatch": {
+        "canonicalName": "Palisades Tahoe U14 Giant Slalom",
+        "date": "2026-01-15",
+        "venue": "Palisades Tahoe",
+        "discipline": "GS",
+        "confidence": 0.92,
+        "reasons": ["sample date and venue match"],
+        "sources": [
+          "https://fwskiing.org/events/u14-schedule-results/",
+          "https://live-timing.com/races.php"
+        ]
+      },
+      "raceAssets": [
+        {
+          "type": "start_list",
+          "label": "Sample U14 GS Start List",
+          "sourceUrl": "https://live-timing.com/sample",
+          "localPath": ""
+        }
+      ],
+      "candidateRoster": [
+        {
+          "name": "Jane Smith",
+          "bib": "42",
+          "club": "PT",
+          "category": "U14",
+          "sourceUrl": "https://live-timing.com/sample"
+        },
+        {
+          "name": "Max Johnson",
+          "bib": "31",
+          "club": "PT",
+          "category": "U14",
+          "sourceUrl": "https://live-timing.com/sample"
+        }
+      ]
+    }
+  ],
+  "videos": [
+    {
+      "id": "sample-video-jane-smith-run-1",
+      "folderId": "sample-folder-palisades-u14-gs",
+      "filename": "bib42_jane_smith_run1.mp4",
+      "sharepointUrl": "https://alterramtnco.sharepoint.com/sample/video-jane-smith-run-1",
+      "downloadUrl": "",
+      "localVideoPath": "",
+      "localAudioPath": "",
+      "transcript": {
+        "source": "microsoft_transcript",
+        "text": "Next on course is Jane Smith, bib forty two from Palisades Tahoe.",
+        "segments": [],
+        "localPath": ""
+      },
+      "athleteLabels": [],
+      "processing": {
+        "status": "pending",
+        "errors": [],
+        "processedAt": ""
+      }
+    },
+    {
+      "id": "sample-video-max-johnson-run-1",
+      "folderId": "sample-folder-palisades-u14-gs",
+      "filename": "clip_0031_run1.mp4",
+      "sharepointUrl": "https://alterramtnco.sharepoint.com/sample/video-max-johnson-run-1",
+      "downloadUrl": "",
+      "localVideoPath": "",
+      "localAudioPath": "",
+      "transcript": {
+        "source": "microsoft_transcript",
+        "text": "Max Johnson is in the start, bib thirty one.",
+        "segments": [],
+        "localPath": ""
+      },
+      "athleteLabels": [],
+      "processing": {
+        "status": "pending",
+        "errors": [],
+        "processedAt": ""
+      }
+    }
+  ]
+}

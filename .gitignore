@@ -1,0 +1,11 @@
+node_modules/
+.venv/
+.env
+.DS_Store
+data/media/
+data/audio/
+data/transcripts/
+data/raw/
+data/index/
+data/exports/
+*.log
