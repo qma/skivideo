@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ski Video Companion</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Ski Video Companion</h1>
+        <p id="statusLine">Loading index...</p>
+      </div>
+      <div class="actions">
+        <button id="ingestSample">Load Sample</button>
+        <button id="fetchEvents">Fetch U14 Events</button>
+        <button id="listSharePoint">List SharePoint</button>
+        <button id="exportLean">Export Lean Index</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="sectionHead">
+          <h2>Search Athletes</h2>
+          <input id="searchInput" type="search" placeholder="Search athlete name, folder, transcript">
+        </div>
+        <div id="results" class="results"></div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Folders</h2>
+          <div class="inlineForm">
+            <input id="folderUrl" placeholder="SharePoint event folder URL">
+            <button id="manifestFolder">Import Folder</button>
+          </div>
+          <div id="folders" class="list"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Jobs And Events</h2>
+          <div id="jobs" class="list"></div>
+          <div id="events" class="list compact"></div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="logDialog">
+      <pre id="logOutput"></pre>
+      <form method="dialog"><button>Close</button></form>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
