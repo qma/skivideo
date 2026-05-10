@@ -56,6 +56,12 @@ export class JsonStore {
     return this.write(store);
   }
 
+  async updateFolder(folderId, patch) {
+    const store = await this.read();
+    store.folders = store.folders.map((folder) => folder.id === folderId ? deepMerge(folder, patch) : folder);
+    return this.write(store);
+  }
+
   async upsertVideos(videos) {
     const store = await this.read();
     const byId = new Map(store.videos.map((video) => [video.id, video]));
@@ -102,6 +108,7 @@ export class JsonStore {
         folderId: video.folderId,
         filename: video.filename,
         sharepointUrl: video.sharepointUrl,
+        transcriptRef: video.transcriptRef || null,
         transcript: video.transcript ? {
           source: video.transcript.source,
           text: snippet(video.transcript.text, 500),

@@ -56,8 +56,9 @@ Root folder:
 Preferred access path:
 
 1. Microsoft Graph / SharePoint API.
-2. Browser-assisted listing/download fallback.
-3. Manual manifest import when automated access is blocked.
+2. SharePoint REST through the anonymous shared-link session when Graph credentials are not configured.
+3. Browser-assisted listing/download fallback.
+4. Manual manifest import when automated access is blocked.
 
 The SharePoint adapter should discover:
 
@@ -183,6 +184,13 @@ flowchart LR
     "segments": [],
     "localPath": "data/transcripts/..."
   },
+  "transcriptRef": {
+    "source": "local_mlx_whisper",
+    "localPath": "data/transcripts/.../transcript.json",
+    "model": "mlx-community/whisper-small-mlx",
+    "textLength": 9,
+    "segmentCount": 1
+  },
   "athleteLabels": [
     {
       "name": "First Last",
@@ -235,6 +243,16 @@ Visual labels must not overwrite stronger manual or transcript labels.
 10. Store metadata in the local index.
 11. Verify search returns SharePoint playback links.
 
+Current validation target:
+
+- Shared-link REST listing found the U14 `2025-2026` folders.
+- Oldest folder by SharePoint `TimeCreated`: `GS Dec 30, 2025`.
+- Folder manifest contains 56 MP4 files.
+- Smallest validation clip: `P1000031.MP4`.
+- Second validation clip: `P1000032.MP4`.
+- Both clips were downloaded, audio-extracted with the static `imageio-ffmpeg` binary, and transcribed locally with MLX Whisper.
+- Both clips currently produce the single-word transcript callout `Claydon`, stored as a low-confidence review label until a roster or manual correction provides a canonical full name.
+
 ### Batch Mode
 
 After one event is validated:
@@ -258,6 +276,10 @@ Evidence priority:
 7. Future visual similarity propagation.
 
 The racer roster is a spelling and candidate hint, not proof. A roster match can increase confidence only when there is transcript, filename, or manual evidence.
+
+Transcription and labeling are separate stages. Full transcript artifacts are stored under `data/transcripts/` and referenced from video metadata through `transcriptRef`. Labeling reads the full transcript plus event context, Live-Timing start lists, and any known TPT roster aliases, then writes separate `athleteLabels` evidence records.
+
+Fuzzy name matching is required because skiing audio is often short, noisy, and phonetically ambiguous. The deterministic labeler should compare transcript observations against candidate rosters with exact matching, partial-name matching, edit-distance similarity, and phonetic matching. For example, a transcript observation like `Claydon` may be a low-confidence raw transcript label by itself, or a higher-confidence canonical roster match if the event start list contains a plausible TPT athlete such as `Clayton ...`.
 
 ## App UX
 

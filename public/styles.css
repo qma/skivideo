@@ -119,6 +119,11 @@ input {
   min-width: 180px;
 }
 
+#serverRelativeUrl {
+  flex: 1;
+  min-width: 180px;
+}
+
 .list,
 .results {
   display: grid;

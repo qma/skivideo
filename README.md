@@ -35,10 +35,16 @@ npm run cli -- sample
 npm run cli -- ingest-sample
 npm run cli -- fetch-events
 npm run cli -- list-sharepoint
+npm run cli -- list-sharepoint-rest
+npm run cli -- ingest-oldest-sharepoint-folder
+npm run cli -- correlate-folder-live-timing <folderId>
 npm run cli -- process-folder sample-folder-palisades-u14-gs
+npm run cli -- process-video <videoId>
 npm run cli -- export-lean
 npm run cli -- search "Jane"
 ```
+
+For the provided Team Palisades shared link, `list-sharepoint-rest` works without Graph credentials by establishing the anonymous shared-link SharePoint session and calling SharePoint REST endpoints. The first validation folder selected by creation date is `GS Dec 30, 2025`.
 
 ## Data Layout
 
@@ -57,3 +63,7 @@ SharePoint listing prefers Microsoft Graph. Configure either:
 - `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET`.
 
 Audio transcription defaults to local MLX Whisper on Apple Silicon. Install it with `scripts/install-whisper.sh`. OpenAI is optional fallback only when `OPENAI_API_KEY` is present. Without any transcription backend, the app still runs deterministic matching against existing transcripts, filenames, and event rosters.
+
+The installer also installs `imageio-ffmpeg`, which provides a static Apple Silicon `ffmpeg` fallback. This avoids depending on the local Homebrew `ffmpeg` install.
+
+Transcripts and labels are intentionally decoupled. Full transcript artifacts are kept under `data/transcripts/` and referenced from video records through `transcriptRef`; athlete labels are derived evidence that can be rerun with better rosters, fuzzy matching, or an LLM without retranscribing the media.

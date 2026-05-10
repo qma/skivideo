@@ -18,8 +18,11 @@ function bindActions() {
   el("ingestSample").addEventListener("click", () => action("/api/ingest-sample"));
   el("fetchEvents").addEventListener("click", () => action("/api/fetch-events"));
   el("listSharePoint").addEventListener("click", () => action("/api/list-sharepoint"));
+  el("listSharePointRest").addEventListener("click", () => action("/api/list-sharepoint-rest"));
+  el("ingestOldest").addEventListener("click", () => action("/api/ingest-oldest-sharepoint-folder"));
   el("exportLean").addEventListener("click", () => action("/api/export-lean"));
   el("manifestFolder").addEventListener("click", () => action("/api/manifest-sharepoint", { folderUrl: el("folderUrl").value }));
+  el("manifestRestFolder").addEventListener("click", () => action("/api/manifest-sharepoint-rest", { serverRelativeUrl: el("serverRelativeUrl").value }));
   el("searchInput").addEventListener("input", async (event) => {
     state.query = event.target.value;
     await renderSearch();
@@ -54,10 +57,12 @@ function renderFolders() {
             <p>${escapeHtml(folder.path || folder.source || "")}</p>
           </div>
           <button data-process="${escapeHtml(folder.id)}">Process</button>
+          <button data-correlate="${escapeHtml(folder.id)}">Live-Timing</button>
         </div>
         <div class="pillRow">
           <span class="pill">${videos.length} videos</span>
           ${event ? `<span class="pill">Event ${Math.round((event.confidence || 0) * 100)}%</span>` : `<span class="pill warn">No event match</span>`}
+          ${folder.raceAssets?.length ? `<span class="pill">${folder.raceAssets.length} race assets</span>` : ""}
           ${folder.candidateRoster?.length ? `<span class="pill">${folder.candidateRoster.length} racers</span>` : ""}
         </div>
         ${event ? `<p class="muted">${escapeHtml(event.canonicalName || "")} ${escapeHtml(event.date || "")}</p>` : ""}
@@ -67,6 +72,9 @@ function renderFolders() {
 
   for (const button of document.querySelectorAll("[data-process]")) {
     button.addEventListener("click", () => action("/api/process-folder", { folderId: button.dataset.process }));
+  }
+  for (const button of document.querySelectorAll("[data-correlate]")) {
+    button.addEventListener("click", () => action("/api/correlate-folder-live-timing", { folderId: button.dataset.correlate }));
   }
 }
 

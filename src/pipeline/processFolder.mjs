@@ -86,6 +86,15 @@ export async function processVideo(config, video, folder) {
   }
 
   next.athleteLabels = await labelVideoAthletes(config, next, folder);
+  if (next.transcript) {
+    next.transcriptRef = {
+      source: next.transcript.source,
+      localPath: next.transcript.localPath || "",
+      model: next.transcript.model || "",
+      textLength: String(next.transcript.text || "").length,
+      segmentCount: Array.isArray(next.transcript.segments) ? next.transcript.segments.length : 0
+    };
+  }
   const bestConfidence = Math.max(0, ...next.athleteLabels.map((label) => Number(label.confidence) || 0));
   next.processing = {
     status: bestConfidence >= 0.65 ? "indexed" : "needs_review",

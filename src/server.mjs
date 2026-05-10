@@ -4,6 +4,7 @@ import path from "node:path";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
+import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
@@ -53,8 +54,43 @@ async function routeApi(req, url) {
     const body = await readBody(req);
     return fetchLiveTimingSearch(config, body.query || "");
   }
+  if (req.method === "POST" && url.pathname === "/api/correlate-folder-live-timing") {
+    const body = await readBody(req);
+    const state = await store.read();
+    const folder = state.folders.find((item) => item.id === body.folderId);
+    if (!folder) throw new Error(`Folder not found: ${body.folderId}`);
+    const query = [
+      folder.eventMatch?.date,
+      folder.eventMatch?.venue,
+      folder.eventMatch?.discipline,
+      folder.name
+    ].filter(Boolean).join(" ");
+    const result = await fetchLiveTimingSearch(config, query);
+    const assets = [
+      {
+        type: "live_timing_search",
+        label: `Live-Timing search: ${query}`,
+        sourceUrl: result.sourceUrl,
+        localPath: result.rawPath
+      },
+      ...result.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
+    ];
+    await store.updateFolder(body.folderId, {
+      raceAssets: assets,
+      eventMatch: {
+        ...(folder.eventMatch || {}),
+        sources: [...new Set([...(folder.eventMatch?.sources || []), result.sourceUrl])]
+      }
+    });
+    return { ok: true, folderId: body.folderId, query, assets };
+  }
   if (req.method === "POST" && url.pathname === "/api/list-sharepoint") {
     const folders = await listRootEventFolders(config);
+    await store.upsertFolders(folders);
+    return { ok: true, folders };
+  }
+  if (req.method === "POST" && url.pathname === "/api/list-sharepoint-rest") {
+    const folders = await listRootEventFoldersRest(config);
     await store.upsertFolders(folders);
     return { ok: true, folders };
   }
@@ -64,6 +100,20 @@ async function routeApi(req, url) {
     await store.upsertFolders(manifest.folders || []);
     await store.upsertVideos(manifest.videos || []);
     return { ok: true, manifest };
+  }
+  if (req.method === "POST" && url.pathname === "/api/manifest-sharepoint-rest") {
+    const body = await readBody(req);
+    const manifest = await buildRestFolderManifest(config, body.serverRelativeUrl);
+    await store.upsertFolders(manifest.folders || []);
+    await store.upsertVideos(manifest.videos || []);
+    return { ok: true, manifest };
+  }
+  if (req.method === "POST" && url.pathname === "/api/ingest-oldest-sharepoint-folder") {
+    const folder = await pickOldestFolder(config);
+    const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl);
+    await store.upsertFolders(manifest.folders || []);
+    await store.upsertVideos(manifest.videos || []);
+    return { ok: true, selectedFolder: manifest.folders[0], videos: manifest.videos.length };
   }
   if (req.method === "POST" && url.pathname === "/api/process-folder") {
     const body = await readBody(req);

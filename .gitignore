@@ -8,4 +8,5 @@ data/transcripts/
 data/raw/
 data/index/
 data/exports/
+data/tools/
 *.log

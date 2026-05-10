@@ -3,8 +3,9 @@ import fs from "node:fs/promises";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs";
+import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
-import { processFolder } from "./pipeline/processFolder.mjs";
+import { processFolder, processVideo } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -22,9 +23,14 @@ async function main(cmd, args) {
   if (cmd === "ingest-manifest") return ingestManifest(args[0]);
   if (cmd === "fetch-events") return fetchEvents();
   if (cmd === "fetch-live-timing") return fetchLiveTiming(args.join(" "));
+  if (cmd === "correlate-folder-live-timing") return correlateFolderLiveTiming(args[0]);
   if (cmd === "list-sharepoint") return listSharePoint();
+  if (cmd === "list-sharepoint-rest") return listSharePointRest();
   if (cmd === "manifest-sharepoint") return manifestSharePoint(args[0]);
+  if (cmd === "manifest-sharepoint-rest") return manifestSharePointRest(args.join(" "));
+  if (cmd === "ingest-oldest-sharepoint-folder") return ingestOldestSharePointFolder();
   if (cmd === "process-folder") return printJson(await processFolder(config, store, args[0]));
+  if (cmd === "process-video") return processSingleVideo(args[0]);
   if (cmd === "export-lean") return printJson(await store.exportLean());
   if (cmd === "search") return search(args.join(" "));
   if (cmd === "backends") return printJson(await detectTranscriptionBackends(config));
@@ -57,8 +63,45 @@ async function fetchLiveTiming(query) {
   printJson(result);
 }
 
+async function correlateFolderLiveTiming(folderId) {
+  if (!folderId) throw new Error("Folder id is required.");
+  const state = await store.read();
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) throw new Error(`Folder not found: ${folderId}`);
+  const query = [
+    folder.eventMatch?.date,
+    folder.eventMatch?.venue,
+    folder.eventMatch?.discipline,
+    folder.name
+  ].filter(Boolean).join(" ");
+  const result = await fetchLiveTimingSearch(config, query);
+  const assets = [
+    {
+      type: "live_timing_search",
+      label: `Live-Timing search: ${query}`,
+      sourceUrl: result.sourceUrl,
+      localPath: result.rawPath
+    },
+    ...result.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
+  ];
+  await store.updateFolder(folderId, {
+    raceAssets: assets,
+    eventMatch: {
+      ...(folder.eventMatch || {}),
+      sources: [...new Set([...(folder.eventMatch?.sources || []), result.sourceUrl])]
+    }
+  });
+  printJson({ folderId, query, assets });
+}
+
 async function listSharePoint() {
   const folders = await listRootEventFolders(config);
+  await store.upsertFolders(folders);
+  printJson({ folders });
+}
+
+async function listSharePointRest() {
+  const folders = await listRootEventFoldersRest(config);
   await store.upsertFolders(folders);
   printJson({ folders });
 }
@@ -68,6 +111,28 @@ async function manifestSharePoint(folderUrl) {
   await store.upsertFolders(manifest.folders);
   await store.upsertVideos(manifest.videos);
   printJson(manifest);
+}
+
+async function manifestSharePointRest(folderServerRelativeUrl) {
+  if (!folderServerRelativeUrl) throw new Error("Folder server-relative URL is required.");
+  const manifest = await buildRestFolderManifest(config, folderServerRelativeUrl);
+  await store.upsertFolders(manifest.folders);
+  await store.upsertVideos(manifest.videos);
+  printJson({
+    folder: manifest.folders[0],
+    videos: manifest.videos.length
+  });
+}
+
+async function ingestOldestSharePointFolder() {
+  const folder = await pickOldestFolder(config);
+  const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl);
+  await store.upsertFolders(manifest.folders);
+  await store.upsertVideos(manifest.videos);
+  printJson({
+    selectedFolder: manifest.folders[0],
+    videos: manifest.videos.length
+  });
 }
 
 async function search(query) {
@@ -88,6 +153,25 @@ async function search(query) {
   printJson(results);
 }
 
+async function processSingleVideo(videoId) {
+  if (!videoId) throw new Error("Video id is required.");
+  const state = await store.read();
+  const video = state.videos.find((item) => item.id === videoId);
+  if (!video) throw new Error(`Video not found: ${videoId}`);
+  const folder = state.folders.find((item) => item.id === video.folderId);
+  const processed = await processVideo(config, video, folder);
+  await store.updateVideo(video.id, processed);
+  printJson({
+    id: processed.id,
+    filename: processed.filename,
+    status: processed.processing.status,
+    errors: processed.processing.errors,
+    transcriptSource: processed.transcript?.source,
+    transcriptPreview: String(processed.transcript?.text || "").slice(0, 400),
+    labels: processed.athleteLabels
+  });
+}
+
 function printHelp() {
   console.log(`Ski Video Companion CLI
 
@@ -98,9 +182,14 @@ Commands:
   ingest-manifest <path>
   fetch-events
   fetch-live-timing [query]
+  correlate-folder-live-timing <folderId>
   list-sharepoint
+  list-sharepoint-rest
   manifest-sharepoint <folderUrl>
+  manifest-sharepoint-rest <serverRelativeUrl>
+  ingest-oldest-sharepoint-folder
   process-folder <folderId>
+  process-video <videoId>
   export-lean
   search <query>
   backends

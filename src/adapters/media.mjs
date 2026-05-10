@@ -2,8 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { slugify } from "../lib/ids.mjs";
+import { establishSharePointSession } from "./sharepointRest.mjs";
 
-export async function downloadToCache(url, targetPath) {
+export async function downloadToCache(url, targetPath, options = {}) {
   if (!url) throw new Error("Download URL is empty.");
   try {
     await fs.access(targetPath);
@@ -11,7 +12,9 @@ export async function downloadToCache(url, targetPath) {
   } catch {
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
   }
-  const response = await fetch(url);
+  const headers = {};
+  if (options.cookie) headers.cookie = options.cookie;
+  const response = await fetch(url, { headers });
   if (!response.ok) throw new Error(`Download failed ${response.status}: ${url}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(targetPath, bytes);
@@ -24,7 +27,7 @@ export async function cacheTranscript(video, config) {
   if (!(source.downloadUrl || source.sourceUrl)) return source;
   const url = source.downloadUrl || source.sourceUrl;
   const target = path.join(config.transcriptDir, `${slugify(video.id)}.txt`);
-  const downloaded = await downloadToCache(url, target);
+  const downloaded = await downloadToCache(url, target, await sharePointDownloadOptions(config, url));
   const text = await fs.readFile(downloaded.path, "utf8");
   return {
     ...source,
@@ -38,7 +41,7 @@ export async function mirrorVideo(video, folder, config) {
   if (!video.downloadUrl) throw new Error(`No download URL for ${video.filename}`);
   const folderSlug = slugify(folder?.name || video.folderId);
   const target = path.join(config.mediaDir, folderSlug, video.filename);
-  const downloaded = await downloadToCache(video.downloadUrl, target);
+  const downloaded = await downloadToCache(video.downloadUrl, target, await sharePointDownloadOptions(config, video.downloadUrl));
   return downloaded.path;
 }
 
@@ -50,7 +53,8 @@ export async function extractAudio(videoPath, config) {
   } catch {
     await fs.mkdir(path.dirname(outPath), { recursive: true });
   }
-  await run("ffmpeg", [
+  const ffmpeg = await resolveFfmpeg(config);
+  await run(ffmpeg, [
     "-y",
     "-i",
     videoPath,
@@ -64,6 +68,13 @@ export async function extractAudio(videoPath, config) {
     outPath
   ]);
   return outPath;
+}
+
+export async function resolveFfmpeg(config) {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  const bundled = await imageioFfmpegPath(config);
+  if (bundled) return bundled;
+  return "ffmpeg";
 }
 
 export function stripTranscriptMarkup(text) {
@@ -88,4 +99,20 @@ function run(command, args) {
       else reject(new Error(`${command} exited ${code}: ${stderr || stdout}`));
     });
   });
+}
+
+async function sharePointDownloadOptions(config, url) {
+  if (!/sharepoint\.com/i.test(url)) return {};
+  const session = await establishSharePointSession(config.sharepointRootUrl);
+  return { cookie: session.cookies };
+}
+
+async function imageioFfmpegPath(config) {
+  const python = path.join(config.rootDir, ".venv", "bin", "python");
+  try {
+    await fs.access(python);
+    return (await run(python, ["-c", "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"])).trim();
+  } catch {
+    return "";
+  }
 }

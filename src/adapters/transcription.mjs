@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { slugify } from "../lib/ids.mjs";
+import { resolveFfmpeg } from "./media.mjs";
 
 export async function detectTranscriptionBackends(config) {
   const mlxPython = path.join(config.rootDir, ".venv", "bin", "python");
@@ -34,7 +35,15 @@ export async function transcribeWithMlxWhisper(config, audioPath, options = {}) 
     "out_path.write_text(json.dumps(result, indent=2), encoding='utf-8')",
     "print(out_path)"
   ].join("\n");
-  await run(python, ["-c", script, audioPath, outPath, model], { cwd: config.rootDir });
+  const ffmpeg = await resolveFfmpeg(config);
+  const ffmpegBinDir = await ensureFfmpegCommandShim(config, ffmpeg);
+  await run(python, ["-c", script, audioPath, outPath, model], {
+    cwd: config.rootDir,
+    env: {
+      ...process.env,
+      PATH: `${ffmpegBinDir}:${path.dirname(ffmpeg)}:${process.env.PATH || ""}`
+    }
+  });
   const raw = JSON.parse(await fs.readFile(outPath, "utf8"));
   return {
     source: "local_mlx_whisper",
@@ -43,6 +52,18 @@ export async function transcribeWithMlxWhisper(config, audioPath, options = {}) 
     localPath: outPath,
     model
   };
+}
+
+async function ensureFfmpegCommandShim(config, ffmpegPath) {
+  const binDir = path.join(config.dataDir, "tools", "bin");
+  const shim = path.join(binDir, "ffmpeg");
+  await fs.mkdir(binDir, { recursive: true });
+  try {
+    await fs.lstat(shim);
+  } catch {
+    await fs.symlink(ffmpegPath, shim);
+  }
+  return binDir;
 }
 
 export async function transcribeWithOpenAi(config, audioPath) {
@@ -83,6 +104,7 @@ function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
+      env: options.env || process.env,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";

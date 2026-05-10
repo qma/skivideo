@@ -16,6 +16,8 @@
         <button id="ingestSample">Load Sample</button>
         <button id="fetchEvents">Fetch U14 Events</button>
         <button id="listSharePoint">List SharePoint</button>
+        <button id="listSharePointRest">List Shared Link</button>
+        <button id="ingestOldest">Ingest Oldest</button>
         <button id="exportLean">Export Lean Index</button>
       </div>
     </header>
@@ -35,6 +37,10 @@
           <div class="inlineForm">
             <input id="folderUrl" placeholder="SharePoint event folder URL">
             <button id="manifestFolder">Import Folder</button>
+          </div>
+          <div class="inlineForm">
+            <input id="serverRelativeUrl" placeholder="SharePoint server-relative folder path">
+            <button id="manifestRestFolder">Import Shared Folder</button>
           </div>
           <div id="folders" class="list"></div>
         </div>
