@@ -85,7 +85,8 @@ main {
 }
 
 button,
-input {
+input,
+select {
   min-height: 36px;
   border-radius: 6px;
   border: 1px solid var(--line);
@@ -104,7 +105,8 @@ button:hover {
   background: var(--accent-dark);
 }
 
-input {
+input,
+select {
   background: #fff;
   color: var(--ink);
   padding: 0 10px;
@@ -175,6 +177,105 @@ input {
   color: var(--bad);
 }
 
+.eventTools {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 170px 180px;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.assetRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.assetLink {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #f2f6f1;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.eventTable {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.eventTable th,
+.eventTable td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.eventTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f2f6f1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.thumbVideo,
+.thumbMissing {
+  width: 164px;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #101816;
+}
+
+.thumbMissing {
+  display: grid;
+  place-items: center;
+  color: #cbd5d1;
+  font-size: 12px;
+}
+
+.labelStack {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 190px;
+  margin-bottom: 4px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.labelStack.confident {
+  background: #eef5f4;
+  color: var(--accent-dark);
+}
+
+.labelStack.ambiguous {
+  background: #fff7ea;
+  color: var(--warn);
+}
+
+.evidenceCell {
+  max-width: 360px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 a {
   color: var(--accent-dark);
 }
@@ -199,6 +300,10 @@ pre {
   }
 
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .eventTools {
     grid-template-columns: 1fr;
   }
 

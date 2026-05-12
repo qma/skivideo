@@ -1,7 +1,11 @@
 const state = {
   store: null,
   config: null,
-  query: ""
+  query: "",
+  selectedFolderId: "",
+  eventQuery: "",
+  eventStatus: "",
+  eventConfidence: ""
 };
 
 const el = (id) => document.getElementById(id);
@@ -21,8 +25,25 @@ function bindActions() {
   el("listSharePointRest").addEventListener("click", () => action("/api/list-sharepoint-rest"));
   el("ingestOldest").addEventListener("click", () => action("/api/ingest-oldest-sharepoint-folder"));
   el("exportLean").addEventListener("click", () => action("/api/export-lean"));
+  el("syncMetadata").addEventListener("click", () => action("/api/sync-metadata"));
   el("manifestFolder").addEventListener("click", () => action("/api/manifest-sharepoint", { folderUrl: el("folderUrl").value }));
   el("manifestRestFolder").addEventListener("click", () => action("/api/manifest-sharepoint-rest", { serverRelativeUrl: el("serverRelativeUrl").value }));
+  el("closeEventView").addEventListener("click", () => {
+    state.selectedFolderId = "";
+    renderEventView();
+  });
+  el("eventSearchInput").addEventListener("input", (event) => {
+    state.eventQuery = event.target.value;
+    renderEventView();
+  });
+  el("eventStatusFilter").addEventListener("change", (event) => {
+    state.eventStatus = event.target.value;
+    renderEventView();
+  });
+  el("eventConfidenceFilter").addEventListener("change", (event) => {
+    state.eventConfidence = event.target.value;
+    renderEventView();
+  });
   el("searchInput").addEventListener("input", async (event) => {
     state.query = event.target.value;
     await renderSearch();
@@ -33,6 +54,7 @@ async function refresh() {
   state.store = await api("/api/store");
   renderStatus();
   renderFolders();
+  renderEventView();
   renderJobsAndEvents();
   await renderSearch();
 }
@@ -56,6 +78,7 @@ function renderFolders() {
             <strong>${escapeHtml(folder.name)}</strong>
             <p>${escapeHtml(folder.path || folder.source || "")}</p>
           </div>
+          <button data-view-event="${escapeHtml(folder.id)}">View Event</button>
           <button data-process="${escapeHtml(folder.id)}">Process</button>
           <button data-correlate="${escapeHtml(folder.id)}">Live-Timing</button>
         </div>
@@ -73,9 +96,103 @@ function renderFolders() {
   for (const button of document.querySelectorAll("[data-process]")) {
     button.addEventListener("click", () => action("/api/process-folder", { folderId: button.dataset.process }));
   }
+  for (const button of document.querySelectorAll("[data-view-event]")) {
+    button.addEventListener("click", () => {
+      state.selectedFolderId = button.dataset.viewEvent;
+      state.eventQuery = "";
+      state.eventStatus = "";
+      state.eventConfidence = "";
+      renderEventView();
+      el("eventViewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
   for (const button of document.querySelectorAll("[data-correlate]")) {
     button.addEventListener("click", () => action("/api/correlate-folder-live-timing", { folderId: button.dataset.correlate }));
   }
+}
+
+function renderEventView() {
+  const panel = el("eventViewPanel");
+  const folder = state.store?.folders.find((item) => item.id === state.selectedFolderId);
+  if (!folder) {
+    panel.hidden = true;
+    return;
+  }
+  const videos = state.store.videos
+    .filter((video) => video.folderId === folder.id)
+    .filter((video) => eventVideoMatchesFilters(video, folder))
+    .sort((a, b) => compareVideoRows(a, b));
+  const allVideos = state.store.videos.filter((video) => video.folderId === folder.id);
+  const indexed = allVideos.filter((video) => video.processing?.status === "indexed").length;
+  const review = allVideos.filter((video) => video.processing?.status === "needs_review").length;
+  const failed = allVideos.filter((video) => video.processing?.status === "failed").length;
+  const pending = allVideos.length - indexed - review - failed;
+  panel.hidden = false;
+  el("eventSearchInput").value = state.eventQuery;
+  el("eventStatusFilter").value = state.eventStatus;
+  el("eventConfidenceFilter").value = state.eventConfidence;
+  el("eventTitle").textContent = folder.name;
+  el("eventMeta").textContent = [
+    folder.eventMatch?.date,
+    folder.eventMatch?.venue,
+    folder.eventMatch?.discipline,
+    `${allVideos.length} videos`,
+    videos.length !== allVideos.length ? `${videos.length} shown` : "",
+    `${indexed} indexed`,
+    `${review} review`,
+    pending ? `${pending} pending` : "",
+    failed ? `${failed} failed` : "",
+    folder.candidateRoster?.length ? `${folder.candidateRoster.length} racers` : ""
+  ].filter(Boolean).join(" · ");
+  el("eventAssets").innerHTML = (folder.raceAssets || []).slice(0, 10).map((asset) => `
+    <a class="assetLink" href="${escapeAttr(asset.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(asset.label || asset.type)}</a>
+  `).join("");
+  el("eventVideoRows").innerHTML = videos.map((video) => {
+    const labels = video.athleteLabels || [];
+    const best = labels[0];
+    const status = video.processing?.status || "pending";
+    const localVideo = Boolean(video.localVideoPath);
+    return `
+      <tr>
+        <td>
+          ${localVideo
+            ? `<video class="thumbVideo" src="/media/${escapeAttr(video.id)}" controls preload="metadata" muted playsinline></video>`
+            : `<div class="thumbMissing">SharePoint only</div>`}
+        </td>
+        <td>
+          <strong>${escapeHtml(video.filename)}</strong>
+          <div class="muted">${formatBytes(video.sizeBytes)}</div>
+          <div class="muted">${escapeHtml((video.transcript?.text || "").slice(0, 90))}</div>
+        </td>
+        <td>${labels.length ? labels.map((label) => `
+          <span class="labelStack ${label.confidence >= 0.65 ? "confident" : "ambiguous"}">
+            ${escapeHtml(label.name)}
+            <span>${Math.round((label.confidence || 0) * 100)}%</span>
+          </span>
+        `).join("") : `<span class="muted">Unlabeled</span>`}</td>
+        <td><span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span></td>
+        <td class="evidenceCell">${escapeHtml(best?.evidence || video.transcript?.text || "")}</td>
+        <td>${video.sharepointUrl ? `<a href="${escapeAttr(video.sharepointUrl)}" target="_blank" rel="noreferrer">SharePoint</a>` : ""}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="6" class="muted">No videos in this event.</td></tr>`;
+}
+
+function eventVideoMatchesFilters(video) {
+  const status = video.processing?.status || "pending";
+  if (state.eventStatus && status !== state.eventStatus) return false;
+  const labels = video.athleteLabels || [];
+  if (state.eventConfidence === "confident" && !labels.some((label) => label.confidence >= 0.65)) return false;
+  if (state.eventConfidence === "ambiguous" && !labels.some((label) => label.confidence > 0 && label.confidence < 0.65)) return false;
+  if (state.eventConfidence === "unlabeled" && labels.length) return false;
+  const needle = normalizeClientText(state.eventQuery);
+  if (!needle) return true;
+  return normalizeClientText([
+    video.filename,
+    video.transcript?.text,
+    video.processing?.status,
+    ...labels.flatMap((label) => [label.name, label.evidence, label.source])
+  ].join(" ")).includes(needle);
 }
 
 function renderJobsAndEvents() {
@@ -98,6 +215,10 @@ function renderJobsAndEvents() {
 }
 
 async function renderSearch() {
+  if (!state.query.trim()) {
+    el("results").innerHTML = `<p class="muted">Search by athlete name to list matching videos with SharePoint playback links.</p>`;
+    return;
+  }
   const data = await api(`/api/search?q=${encodeURIComponent(state.query)}`);
   el("results").innerHTML = data.results.map((video) => {
     const labels = video.athleteLabels || [];
@@ -158,4 +279,33 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value).replaceAll("`", "&#096;");
+}
+
+function compareVideoRows(a, b) {
+  const aLabel = a.athleteLabels?.[0]?.name || "zzzz";
+  const bLabel = b.athleteLabels?.[0]?.name || "zzzz";
+  return aLabel.localeCompare(bLabel) || String(a.filename).localeCompare(String(b.filename));
+}
+
+function formatBytes(value) {
+  const bytes = Number(value) || 0;
+  if (!bytes) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(unit ? 1 : 0)} ${units[unit]}`;
+}
+
+function normalizeClientText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

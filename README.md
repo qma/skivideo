@@ -24,8 +24,11 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 - Event-to-folder matching heuristics.
 - Transcript source normalization.
 - Deterministic roster/transcript/filename athlete labeler.
+- Local-only relabeling from cached transcripts for prompt/rule iteration without media downloads.
 - Local Apple Silicon optimized MLX Whisper transcription hook.
 - OpenAI transcription and labeler hooks as optional fallbacks when `OPENAI_API_KEY` is available.
+- Event detail view with status/confidence filters, event-local search, Live-Timing assets, SharePoint links, and embedded local video players.
+- Optional Firestore metadata sync through Firebase service-account credentials.
 - SharePoint playback links in search results.
 
 ## Useful Commands
@@ -40,9 +43,11 @@ npm run cli -- ingest-oldest-sharepoint-folder
 npm run cli -- fetch-live-timing-day <YYYY-MM-DD>
 npm run cli -- fetch-live-timing-race <raceId>
 npm run cli -- correlate-folder-live-timing <folderId>
-npm run cli -- process-folder sample-folder-palisades-u14-gs
+npm run cli -- process-folder <folderId> --parallel 4
+npm run cli -- relabel-folder <folderId>
 npm run cli -- process-video <videoId>
 npm run cli -- export-lean
+npm run cli -- sync-metadata
 npm run cli -- search "Jane"
 ```
 
@@ -56,6 +61,23 @@ For the provided Team Palisades shared link, `list-sharepoint-rest` works withou
 - `data/audio/`: extracted or downloaded audio, excluded from git.
 - `data/transcripts/`: generated transcripts, excluded from git.
 - `data/exports/lean-index.json`: publishable metadata export.
+
+## Metadata Backend
+
+The authoritative local working store is `data/index/store.json`. It keeps folder, event, video, transcript references, athlete labels, processing jobs, and race assets together so local processing can resume incrementally.
+
+For a hosted/search-only app, use `npm run cli -- export-lean` to produce `data/exports/lean-index.json`. This lean export keeps metadata and SharePoint playback links, but not hosted media.
+
+Firebase Firestore sync is implemented as an optional backend:
+
+```sh
+METADATA_BACKEND=firebase
+FIREBASE_PROJECT_ID=your-project
+FIREBASE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json
+npm run cli -- sync-metadata
+```
+
+The sync writes prefixed Firestore collections for folders, videos, events, jobs, and store metadata. This keeps local media/transcripts out of the hosted database while making the searchable index publishable.
 
 ## Credential Notes
 

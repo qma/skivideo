@@ -3,7 +3,9 @@ import { cacheTranscript, mirrorVideo, extractAudio } from "../adapters/media.mj
 import { transcribeAudio } from "../adapters/transcription.mjs";
 import { labelVideoAthletes } from "./labeler.mjs";
 
-export async function processFolder(config, store, folderId) {
+export async function processFolder(config, store, folderId, options = {}) {
+  const requestedParallel = Number(options.parallel || 1);
+  const parallel = Number.isFinite(requestedParallel) ? Math.max(1, Math.min(16, Math.floor(requestedParallel))) : 1;
   const startedAt = nowIso();
   const jobId = stableId("job", `${folderId}:${startedAt}`);
   await store.addJob({
@@ -13,7 +15,8 @@ export async function processFolder(config, store, folderId) {
     status: "running",
     startedAt,
     updatedAt: startedAt,
-    message: "Processing started"
+    parallel,
+    message: `Processing started with ${parallel} worker${parallel === 1 ? "" : "s"}`
   });
 
   const state = await store.read();
@@ -23,30 +26,46 @@ export async function processFolder(config, store, folderId) {
   let indexed = 0;
   let needsReview = 0;
   let failed = 0;
+  let cursor = 0;
+  let writeQueue = Promise.resolve();
 
-  for (const video of videos) {
+  const enqueueWrite = (fn) => {
+    const next = writeQueue.then(fn, fn);
+    writeQueue = next.catch(() => {});
+    return next;
+  };
+
+  async function processNext() {
+    const video = videos[cursor];
+    cursor += 1;
+    if (!video) return;
     try {
       const processed = await processVideo(config, video, folder);
-      await store.updateVideo(video.id, processed);
+      await enqueueWrite(() => store.updateVideo(video.id, processed));
       if (processed.processing.status === "indexed") indexed += 1;
       else needsReview += 1;
     } catch (error) {
       failed += 1;
-      await store.updateVideo(video.id, {
+      await enqueueWrite(() => store.updateVideo(video.id, {
         processing: {
           status: "failed",
           errors: [error.message],
           processedAt: nowIso()
         }
-      });
+      }));
     }
-    await store.updateJob(jobId, {
+    await enqueueWrite(() => store.updateJob(jobId, {
       message: `Processed ${indexed + needsReview + failed}/${videos.length}`,
       indexed,
       needsReview,
-      failed
-    });
+      failed,
+      parallel
+    }));
+    return processNext();
   }
+
+  await Promise.all(Array.from({ length: Math.min(parallel, videos.length) }, () => processNext()));
+  await writeQueue;
 
   await store.updateJob(jobId, {
     status: failed ? "completed_with_errors" : "completed",
@@ -54,9 +73,32 @@ export async function processFolder(config, store, folderId) {
     completedAt: nowIso(),
     indexed,
     needsReview,
-    failed
+    failed,
+    parallel
   });
-  return { jobId, indexed, needsReview, failed };
+  return { jobId, indexed, needsReview, failed, parallel };
+}
+
+export async function relabelFolder(config, store, folderId) {
+  const state = await store.read();
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) throw new Error(`Folder not found: ${folderId}`);
+  const videos = state.videos.filter((video) => video.folderId === folderId);
+  let indexed = 0;
+  let needsReview = 0;
+  for (const video of videos) {
+    const athleteLabels = await labelVideoAthletes(config, video, folder);
+    const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
+    const processing = {
+      ...(video.processing || {}),
+      status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
+      relabeledAt: nowIso()
+    };
+    await store.updateVideo(video.id, { athleteLabels, processing });
+    if (processing.status === "indexed") indexed += 1;
+    else needsReview += 1;
+  }
+  return { folderId, videos: videos.length, indexed, needsReview };
 }
 
 export async function processVideo(config, video, folder) {

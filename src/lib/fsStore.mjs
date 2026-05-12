@@ -101,31 +101,39 @@ export class JsonStore {
 
   async exportLean() {
     const store = await this.read();
-    const lean = {
-      version: store.version,
-      exportedAt: nowIso(),
-      folders: store.folders,
-      events: store.events,
-      videos: store.videos.map((video) => ({
-        id: video.id,
-        folderId: video.folderId,
-        filename: video.filename,
-        sharepointUrl: video.sharepointUrl,
-        transcriptRef: video.transcriptRef || null,
-        transcript: video.transcript ? {
-          source: video.transcript.source,
-          text: snippet(video.transcript.text, 500),
-          segments: []
-        } : { source: "unavailable", text: "", segments: [] },
-        athleteLabels: video.athleteLabels || [],
-        processing: video.processing || {}
-      }))
-    };
+    const lean = buildLeanStore(store);
     const exportPath = path.join(this.config.exportDir, "lean-index.json");
     await fs.mkdir(path.dirname(exportPath), { recursive: true });
     await fs.writeFile(exportPath, `${JSON.stringify(lean, null, 2)}\n`);
     return { exportPath, lean };
   }
+}
+
+export function buildLeanStore(store) {
+  return {
+    version: store.version,
+    exportedAt: nowIso(),
+    folders: store.folders,
+    events: store.events,
+    jobs: (store.jobs || []).slice(0, 50),
+    videos: store.videos.map((video) => ({
+      id: video.id,
+      folderId: video.folderId,
+      filename: video.filename,
+      sizeBytes: video.sizeBytes || 0,
+      mimeType: video.mimeType || "",
+      sharepointUrl: video.sharepointUrl,
+      localVideoAvailable: Boolean(video.localVideoPath),
+      transcriptRef: video.transcriptRef || null,
+      transcript: video.transcript ? {
+        source: video.transcript.source,
+        text: snippet(video.transcript.text, 500),
+        segments: []
+      } : { source: "unavailable", text: "", segments: [] },
+      athleteLabels: video.athleteLabels || [],
+      processing: video.processing || {}
+    }))
+  };
 }
 
 function snippet(text, maxLength) {

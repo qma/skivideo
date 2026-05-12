@@ -2,10 +2,11 @@
 import fs from "node:fs/promises";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
+import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingRaceData, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
-import { processFolder, processVideo } from "./pipeline/processFolder.mjs";
+import { processFolder, processVideo, relabelFolder } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -31,9 +32,11 @@ async function main(cmd, args) {
   if (cmd === "manifest-sharepoint") return manifestSharePoint(args[0]);
   if (cmd === "manifest-sharepoint-rest") return manifestSharePointRest(args.join(" "));
   if (cmd === "ingest-oldest-sharepoint-folder") return ingestOldestSharePointFolder();
-  if (cmd === "process-folder") return printJson(await processFolder(config, store, args[0]));
+  if (cmd === "process-folder") return processFolderCommand(args);
+  if (cmd === "relabel-folder") return relabelFolderCommand(args);
   if (cmd === "process-video") return processSingleVideo(args[0]);
   if (cmd === "export-lean") return printJson(await store.exportLean());
+  if (cmd === "sync-metadata") return printJson(await syncMetadataBackend(config, await store.read()));
   if (cmd === "search") return search(args.join(" "));
   if (cmd === "backends") return printJson(await detectTranscriptionBackends(config));
   throw new Error(`Unknown command: ${cmd}`);
@@ -48,6 +51,21 @@ async function ingestManifest(filePath) {
     folders: manifest.folders?.length || 0,
     videos: manifest.videos?.length || 0
   });
+}
+
+async function processFolderCommand(args) {
+  const { positionals, options } = parseArgs(args);
+  const folderId = positionals[0];
+  if (!folderId) throw new Error("Folder id is required.");
+  return printJson(await processFolder(config, store, folderId, {
+    parallel: options.parallel || 1
+  }));
+}
+
+async function relabelFolderCommand(args) {
+  const folderId = args[0];
+  if (!folderId) throw new Error("Folder id is required.");
+  return printJson(await relabelFolder(config, store, folderId));
 }
 
 async function fetchEvents() {
@@ -207,9 +225,11 @@ Commands:
   manifest-sharepoint <folderUrl>
   manifest-sharepoint-rest <serverRelativeUrl>
   ingest-oldest-sharepoint-folder
-  process-folder <folderId>
+  process-folder <folderId> [--parallel n]
+  relabel-folder <folderId>
   process-video <videoId>
   export-lean
+  sync-metadata
   search <query>
   backends
 `);
@@ -217,6 +237,23 @@ Commands:
 
 function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
+}
+
+function parseArgs(args) {
+  const positionals = [];
+  const options = {};
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--parallel" || arg === "-p") {
+      options.parallel = Number(args[i + 1]);
+      i += 1;
+    } else if (arg.startsWith("--parallel=")) {
+      options.parallel = Number(arg.slice("--parallel=".length));
+    } else {
+      positionals.push(arg);
+    }
+  }
+  return { positionals, options };
 }
 
 function serializeLiveTimingMatch(match) {

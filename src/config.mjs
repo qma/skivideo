@@ -26,7 +26,13 @@ export function loadConfig() {
     azureClientSecret: process.env.AZURE_CLIENT_SECRET || "",
     openaiApiKey: process.env.OPENAI_API_KEY || "",
     openaiTranscribeModel: process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
-    openaiLabelModel: process.env.OPENAI_LABEL_MODEL || "gpt-4o-mini"
+    openaiLabelModel: process.env.OPENAI_LABEL_MODEL || "gpt-4o-mini",
+    metadataBackend: process.env.METADATA_BACKEND || "local",
+    firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
+    firebaseDatabaseId: process.env.FIREBASE_DATABASE_ID || "(default)",
+    firebaseCollectionPrefix: process.env.FIREBASE_COLLECTION_PREFIX || "skiVideoCompanion",
+    firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
+    firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || ""
   };
 }
 
@@ -49,6 +55,8 @@ export function publicConfig(config = loadConfig()) {
     hasGraphAccessToken: Boolean(config.graphAccessToken),
     hasAzureClientCredentials: Boolean(config.azureTenantId && config.azureClientId && config.azureClientSecret),
     hasOpenAiKey: Boolean(config.openaiApiKey),
+    metadataBackend: config.metadataBackend,
+    hasFirebaseConfig: Boolean(config.firebaseProjectId && (config.firebaseServiceAccountJson || config.firebaseServiceAccountPath)),
     sharepointRootUrl: config.sharepointRootUrl,
     dataDir: config.dataDir
   };

@@ -19,6 +19,7 @@
         <button id="listSharePointRest">List Shared Link</button>
         <button id="ingestOldest">Ingest Oldest</button>
         <button id="exportLean">Export Lean Index</button>
+        <button id="syncMetadata">Sync Metadata</button>
       </div>
     </header>
 
@@ -29,6 +30,48 @@
           <input id="searchInput" type="search" placeholder="Search athlete name, folder, transcript">
         </div>
         <div id="results" class="results"></div>
+      </section>
+
+      <section id="eventViewPanel" class="panel" hidden>
+        <div class="sectionHead">
+          <div>
+            <h2 id="eventTitle">Event</h2>
+            <p id="eventMeta" class="muted"></p>
+          </div>
+          <button id="closeEventView">Close</button>
+        </div>
+        <div class="eventTools">
+          <input id="eventSearchInput" type="search" placeholder="Filter this event by racer, file, transcript">
+          <select id="eventStatusFilter" aria-label="Event status filter">
+            <option value="">All statuses</option>
+            <option value="indexed">Indexed</option>
+            <option value="needs_review">Needs review</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+          </select>
+          <select id="eventConfidenceFilter" aria-label="Event confidence filter">
+            <option value="">All labels</option>
+            <option value="confident">Confident labels</option>
+            <option value="ambiguous">Ambiguous labels</option>
+            <option value="unlabeled">Unlabeled</option>
+          </select>
+        </div>
+        <div id="eventAssets" class="assetRow"></div>
+        <div class="tableWrap">
+          <table class="eventTable">
+            <thead>
+              <tr>
+                <th>Preview</th>
+                <th>Video</th>
+                <th>Racer</th>
+                <th>Status</th>
+                <th>Evidence</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody id="eventVideoRows"></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="grid">

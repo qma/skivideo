@@ -15,23 +15,37 @@ export function deterministicLabels(video, folder) {
   const filename = video.filename || "";
   const roster = folder?.candidateRoster || [];
   const labels = [];
+  const fuzzyMatches = new Map();
+  const fuzzyObservedCounts = new Map();
+
+  for (const racer of roster) {
+    const fuzzy = bestFuzzyRosterMatch(transcriptText, racer);
+    fuzzyMatches.set(racer, fuzzy);
+    if (fuzzy && fuzzy.score >= 0.76 && isSingleToken(fuzzy.observed)) {
+      const key = normalizeText(fuzzy.observed);
+      fuzzyObservedCounts.set(key, (fuzzyObservedCounts.get(key) || 0) + 1);
+    }
+  }
 
   for (const racer of roster) {
     const inTranscript = includesName(transcriptText, racer.name);
     const inFilename = includesName(filename.replace(/[_-]/g, " "), racer.name);
     const bibMatch = racer.bib && filenameBibMatches(filename, racer.bib);
-    const fuzzy = bestFuzzyRosterMatch(transcriptText, racer);
+    const fuzzy = fuzzyMatches.get(racer);
     const fuzzyMatch = fuzzy && fuzzy.score >= 0.76;
+    const ambiguousFuzzy = fuzzyMatch && isSingleToken(fuzzy.observed) && (fuzzyObservedCounts.get(normalizeText(fuzzy.observed)) || 0) > 1;
     if (!(inTranscript || inFilename || bibMatch || fuzzyMatch)) continue;
-    const confidence = inTranscript ? 0.86 : inFilename ? 0.7 : bibMatch ? 0.58 : Math.min(0.68, fuzzy.score * 0.78);
+    const confidence = inTranscript ? 0.86 : inFilename ? 0.7 : bibMatch ? 0.58 : ambiguousFuzzy ? 0.52 : Math.min(0.68, fuzzy.score * 0.78);
     labels.push({
       name: racer.name,
       confidence,
-      source: inTranscript ? "audio_transcript" : inFilename ? "filename_context" : bibMatch ? "bib_filename_context" : "fuzzy_audio_roster_match",
+      source: inTranscript ? "audio_transcript" : inFilename ? "filename_context" : bibMatch ? "bib_filename_context" : ambiguousFuzzy ? "fuzzy_audio_roster_ambiguous" : "fuzzy_audio_roster_match",
       evidence: inTranscript
         ? evidenceSnippet(transcriptText, racer.name)
         : fuzzyMatch
-          ? `Transcript heard "${fuzzy.observed}", fuzzy-matched to roster name ${racer.name}`
+          ? ambiguousFuzzy
+            ? `Transcript heard "${fuzzy.observed}", which matches multiple roster names including ${racer.name}`
+            : `Transcript heard "${fuzzy.observed}", fuzzy-matched to roster name ${racer.name}`
           : `Matched ${inFilename ? "name" : "bib"} in filename ${filename}`,
       matchedRoster: true,
       fuzzy: fuzzyMatch ? { observed: fuzzy.observed, score: Number(fuzzy.score.toFixed(2)) } : undefined,
@@ -176,4 +190,8 @@ function filenameBibMatches(filename, bib) {
     ...base.matchAll(/(?:^|[^A-Za-z0-9])0*(\d{1,3})(?=$|[^A-Za-z0-9])/g)
   ].map((match) => match[1].replace(/^0+/, ""));
   return candidates.includes(target);
+}
+
+function isSingleToken(value) {
+  return normalizeText(value).split(" ").filter(Boolean).length === 1;
 }

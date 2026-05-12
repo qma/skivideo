@@ -1,12 +1,14 @@
 import http from "node:http";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
+import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
-import { processFolder } from "./pipeline/processFolder.mjs";
+import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -21,6 +23,7 @@ const server = http.createServer(async (req, res) => {
       const result = await routeApi(req, url);
       return sendJson(res, result);
     }
+    if (url.pathname.startsWith("/media/")) return serveMedia(req, res, decodeURIComponent(url.pathname.replace(/^\/media\//, "")));
     return serveStatic(res, url.pathname);
   } catch (error) {
     sendJson(res, { error: error.message }, 500);
@@ -113,11 +116,18 @@ async function routeApi(req, url) {
   }
   if (req.method === "POST" && url.pathname === "/api/process-folder") {
     const body = await readBody(req);
-    return processFolder(config, store, body.folderId);
+    return processFolder(config, store, body.folderId, { parallel: body.parallel || 1 });
+  }
+  if (req.method === "POST" && url.pathname === "/api/relabel-folder") {
+    const body = await readBody(req);
+    return relabelFolder(config, store, body.folderId);
   }
   if (req.method === "POST" && url.pathname === "/api/export-lean") {
     const result = await store.exportLean();
     return { ok: true, exportPath: result.exportPath, counts: countStore(result.lean) };
+  }
+  if (req.method === "POST" && url.pathname === "/api/sync-metadata") {
+    return syncMetadataBackend(config, await store.read());
   }
   return { error: "Not found" };
 }
@@ -147,6 +157,36 @@ async function serveStatic(res, pathname) {
     : "text/html";
   res.writeHead(200, { "content-type": type });
   res.end(content);
+}
+
+async function serveMedia(req, res, videoId) {
+  const state = await store.read();
+  const video = state.videos.find((item) => item.id === videoId);
+  if (!video) return sendJson(res, { error: "Video not found" }, 404);
+  if (!video.localVideoPath) {
+    res.writeHead(302, { location: video.sharepointUrl });
+    return res.end();
+  }
+  const stat = await fs.stat(video.localVideoPath);
+  const range = req.headers.range;
+  if (!range) {
+    res.writeHead(200, {
+      "content-length": stat.size,
+      "content-type": video.mimeType || "video/mp4",
+      "accept-ranges": "bytes"
+    });
+    return fsSync.createReadStream(video.localVideoPath).pipe(res);
+  }
+  const match = range.match(/bytes=(\d+)-(\d*)/);
+  const start = match ? Number(match[1]) : 0;
+  const end = match && match[2] ? Number(match[2]) : stat.size - 1;
+  res.writeHead(206, {
+    "content-range": `bytes ${start}-${end}/${stat.size}`,
+    "accept-ranges": "bytes",
+    "content-length": end - start + 1,
+    "content-type": video.mimeType || "video/mp4"
+  });
+  return fsSync.createReadStream(video.localVideoPath, { start, end }).pipe(res);
 }
 
 async function readBody(req) {
