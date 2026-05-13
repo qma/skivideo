@@ -310,7 +310,7 @@ async function serveMedia(req, res, videoId) {
       "content-type": video.mimeType || "video/mp4",
       "accept-ranges": "bytes"
     });
-    return fsSync.createReadStream(video.localVideoPath).pipe(res);
+    return pipeMediaStream(fsSync.createReadStream(video.localVideoPath), res);
   }
   const match = range.match(/bytes=(\d+)-(\d*)/);
   const start = match ? Number(match[1]) : 0;
@@ -321,7 +321,19 @@ async function serveMedia(req, res, videoId) {
     "content-length": end - start + 1,
     "content-type": video.mimeType || "video/mp4"
   });
-  return fsSync.createReadStream(video.localVideoPath, { start, end }).pipe(res);
+  return pipeMediaStream(fsSync.createReadStream(video.localVideoPath, { start, end }), res);
+}
+
+function pipeMediaStream(stream, res) {
+  stream.on("error", () => {
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Media read failed" }));
+      return;
+    }
+    res.destroy();
+  });
+  return stream.pipe(res);
 }
 
 async function readBody(req) {
