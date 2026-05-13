@@ -454,7 +454,7 @@ select {
 
 .thumbVideo,
 .thumbMissing {
-  width: 164px;
+  width: 208px;
   aspect-ratio: 16 / 9;
   border-radius: 6px;
   border: 1px solid var(--line);

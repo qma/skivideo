@@ -193,13 +193,16 @@ function renderEventView() {
     const labels = video.athleteLabels || [];
     const best = labels[0];
     const status = video.processing?.status || "pending";
-    const localVideo = Boolean(video.localVideoPath);
     return `
       <tr>
         <td>
-          ${localVideo
-            ? `<video class="thumbVideo" src="/media/${escapeAttr(video.id)}" controls preload="metadata" muted playsinline></video>`
-            : `<div class="thumbMissing">SharePoint only</div>`}
+          <video
+            class="thumbVideo"
+            src="${escapeAttr(playbackHref(video))}"
+            controls
+            preload="metadata"
+            playsinline
+            title="${escapeAttr(video.localVideoPath ? "Local cached media" : "Source media fallback")}"></video>
         </td>
         <td>
           <strong>${escapeHtml(video.filename)}</strong>

@@ -84,6 +84,8 @@
 - GS Camp April 25 web-triggered processing completed: 19 videos, 19 local media/transcripts, 0 indexed, 19 review, 0 failed.
 - Fixed concurrent `store.json` read/write failures by writing JSON atomically through temp-file rename, retrying transient JSON reads, and serializing store mutation methods.
 - Web app restarted after the GS Camp April 25 job completed; browser reload confirmed the app renders without the JSON parse error.
+- Event preview videos are larger, audible by default, and always use `/media/:videoId`, which prefers local cached media and falls back to the SharePoint source path when local media is unavailable.
+- Browser validation passed for Apr 25 local previews and Dec 30 mixed local/source fallback previews.
 
 ## In Progress
 
