@@ -3,13 +3,14 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Low-data mode is lifted; resume full media mirroring/transcription/indexing where needed.
-- Validate the completed Jan 10 Northstar Day 2 processing run, keep the web app running for browsing, then commit the task ledger.
+- Replace the raw Node `http` server with a standard lightweight framework server suitable for local use and later deployment.
 
 ## Completed
 
 - Design doc and implementation plan created.
 - Local Node web app and CLI scaffolded.
+- Express added as the backend framework for API routes, static hosting, JSON parsing, 404s, error handling, and media range streaming.
+- Raw Node `http` server replaced with Express, keeping the same API surface and `/media/:videoId` range playback endpoint.
 - SharePoint REST shared-link folder listing works against the real Team Palisades link.
 - MLX Whisper local transcription path installed and validated on Apple Silicon outside the sandbox.
 - Jan 9 Northstar Day 1 folder ingested from SharePoint with 117 videos.

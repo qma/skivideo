@@ -1,7 +1,7 @@
-import http from "node:http";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import express from "express";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
@@ -17,133 +17,123 @@ const config = loadConfig();
 const store = new JsonStore(config);
 await store.ensure();
 
-const server = http.createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname.startsWith("/api/")) {
-      const result = await routeApi(req, url);
-      return sendJson(res, result);
+const app = express();
+
+app.use(express.json({ limit: "2mb" }));
+
+app.get("/api/config", asyncRoute(async () => ({
+  ...publicConfig(config),
+  transcriptionBackends: await detectTranscriptionBackends(config)
+})));
+app.get("/api/store", asyncRoute(() => store.read()));
+app.get("/api/summary", asyncRoute(() => summary()));
+app.get("/api/event", asyncRoute((req) => eventDetail(req.query.folderId || "")));
+app.get("/api/search", asyncRoute((req) => search(req.query.q || "")));
+
+app.post("/api/ingest-sample", asyncRoute(async () => {
+  const manifest = JSON.parse(await fs.readFile(path.join(config.rootDir, "samples/sample-manifest.json"), "utf8"));
+  await store.upsertFolders(manifest.folders || []);
+  await store.upsertVideos(manifest.videos || []);
+  return { ok: true, folders: manifest.folders?.length || 0, videos: manifest.videos?.length || 0 };
+}));
+app.post("/api/fetch-events", asyncRoute(async () => {
+  const events = await fetchFarWestU14Events(config);
+  await store.upsertEvents(events);
+  const state = await store.read();
+  if (state.folders.length && events.length) await store.upsertFolders(matchFoldersToEvents(state.folders, events));
+  return { ok: true, events: events.length };
+}));
+app.post("/api/fetch-live-timing", asyncRoute((req) => fetchLiveTimingSearch(config, req.body.query || "")));
+app.post("/api/correlate-folder-live-timing", asyncRoute(async (req) => {
+  const state = await store.read();
+  const folder = state.folders.find((item) => item.id === req.body.folderId);
+  if (!folder) throw new Error(`Folder not found: ${req.body.folderId}`);
+  const correlation = await correlateFolderWithLiveTiming(config, folder);
+  await store.updateFolder(req.body.folderId, {
+    candidateRoster: correlation.candidateRoster,
+    raceAssets: correlation.assets,
+    eventMatch: {
+      ...(folder.eventMatch || {}),
+      liveTimingMatch: correlation.liveTimingMatches[0] ? serializeLiveTimingMatch(correlation.liveTimingMatches[0]) : null,
+      liveTimingMatches: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+      sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
     }
-    if (url.pathname.startsWith("/media/")) return serveMedia(req, res, decodeURIComponent(url.pathname.replace(/^\/media\//, "")));
-    return serveStatic(res, url.pathname);
-  } catch (error) {
-    sendJson(res, { error: error.message }, 500);
-  }
+  });
+  return {
+    ok: true,
+    folderId: req.body.folderId,
+    query: correlation.query,
+    races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+    candidateRoster: correlation.candidateRoster.length,
+    tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
+    assets: correlation.assets
+  };
+}));
+app.post("/api/list-sharepoint", asyncRoute(async () => {
+  const folders = await listRootEventFolders(config);
+  await store.upsertFolders(folders);
+  return { ok: true, folders };
+}));
+app.post("/api/list-sharepoint-rest", asyncRoute(async () => {
+  const folders = await listRootEventFoldersRest(config);
+  await store.upsertFolders(folders);
+  return { ok: true, folders };
+}));
+app.post("/api/manifest-sharepoint", asyncRoute(async (req) => {
+  const manifest = await buildFolderManifest(config, req.body.folderUrl);
+  await store.upsertFolders(manifest.folders || []);
+  await store.upsertVideos(manifest.videos || []);
+  return { ok: true, manifest };
+}));
+app.post("/api/manifest-sharepoint-rest", asyncRoute(async (req) => {
+  const manifest = await buildRestFolderManifest(config, req.body.serverRelativeUrl);
+  await store.upsertFolders(manifest.folders || []);
+  await store.upsertVideos(manifest.videos || []);
+  return { ok: true, manifest };
+}));
+app.post("/api/ingest-oldest-sharepoint-folder", asyncRoute(async () => {
+  const folder = await pickOldestFolder(config);
+  const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl);
+  await store.upsertFolders(manifest.folders || []);
+  await store.upsertVideos(manifest.videos || []);
+  return { ok: true, selectedFolder: manifest.folders[0], videos: manifest.videos.length };
+}));
+app.post("/api/prepare-folder", asyncRoute((req) => prepareEventFolder(config, store, {
+  folderId: req.body.folderId,
+  serverRelativeUrl: req.body.serverRelativeUrl
+})));
+app.post("/api/process-folder", asyncRoute((req) => processFolder(config, store, req.body.folderId, {
+  parallel: req.body.parallel || 1
+})));
+app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId)));
+app.post("/api/review-video", asyncRoute((req) => reviewVideo(req.body)));
+app.post("/api/export-lean", asyncRoute(async () => {
+  const result = await store.exportLean();
+  return { ok: true, exportPath: result.exportPath, counts: countStore(result.lean) };
+}));
+app.post("/api/sync-metadata", asyncRoute(async () => syncMetadataBackend(config, await store.read())));
+
+app.get("/media/:videoId", asyncRoute(async (req, res) => serveMedia(req, res, req.params.videoId)));
+app.use(express.static(path.join(config.rootDir, "public")));
+app.use((req, res) => res.status(404).json({ error: "Not found" }));
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  res.status(error.status || 500).json({ error: error.message || "Internal server error" });
 });
 
-server.listen(config.port, config.host, () => {
+app.listen(config.port, config.host, () => {
   console.log(`Ski Video Companion running at http://${config.host}:${config.port}`);
 });
 
-async function routeApi(req, url) {
-  if (req.method === "GET" && url.pathname === "/api/config") {
-    return { ...publicConfig(config), transcriptionBackends: await detectTranscriptionBackends(config) };
-  }
-  if (req.method === "GET" && url.pathname === "/api/store") return store.read();
-  if (req.method === "GET" && url.pathname === "/api/summary") return summary();
-  if (req.method === "GET" && url.pathname === "/api/event") return eventDetail(url.searchParams.get("folderId") || "");
-  if (req.method === "GET" && url.pathname === "/api/search") return search(url.searchParams.get("q") || "");
-  if (req.method === "POST" && url.pathname === "/api/ingest-sample") {
-    const manifest = JSON.parse(await fs.readFile(path.join(config.rootDir, "samples/sample-manifest.json"), "utf8"));
-    await store.upsertFolders(manifest.folders || []);
-    await store.upsertVideos(manifest.videos || []);
-    return { ok: true, folders: manifest.folders?.length || 0, videos: manifest.videos?.length || 0 };
-  }
-  if (req.method === "POST" && url.pathname === "/api/fetch-events") {
-    const events = await fetchFarWestU14Events(config);
-    await store.upsertEvents(events);
-    const state = await store.read();
-    if (state.folders.length && events.length) await store.upsertFolders(matchFoldersToEvents(state.folders, events));
-    return { ok: true, events: events.length };
-  }
-  if (req.method === "POST" && url.pathname === "/api/fetch-live-timing") {
-    const body = await readBody(req);
-    return fetchLiveTimingSearch(config, body.query || "");
-  }
-  if (req.method === "POST" && url.pathname === "/api/correlate-folder-live-timing") {
-    const body = await readBody(req);
-    const state = await store.read();
-    const folder = state.folders.find((item) => item.id === body.folderId);
-    if (!folder) throw new Error(`Folder not found: ${body.folderId}`);
-    const correlation = await correlateFolderWithLiveTiming(config, folder);
-    await store.updateFolder(body.folderId, {
-      candidateRoster: correlation.candidateRoster,
-      raceAssets: correlation.assets,
-      eventMatch: {
-        ...(folder.eventMatch || {}),
-        liveTimingMatch: correlation.liveTimingMatches[0] ? serializeLiveTimingMatch(correlation.liveTimingMatches[0]) : null,
-        liveTimingMatches: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
-        sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
-      }
-    });
-    return {
-      ok: true,
-      folderId: body.folderId,
-      query: correlation.query,
-      races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
-      candidateRoster: correlation.candidateRoster.length,
-      tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
-      assets: correlation.assets
-    };
-  }
-  if (req.method === "POST" && url.pathname === "/api/list-sharepoint") {
-    const folders = await listRootEventFolders(config);
-    await store.upsertFolders(folders);
-    return { ok: true, folders };
-  }
-  if (req.method === "POST" && url.pathname === "/api/list-sharepoint-rest") {
-    const folders = await listRootEventFoldersRest(config);
-    await store.upsertFolders(folders);
-    return { ok: true, folders };
-  }
-  if (req.method === "POST" && url.pathname === "/api/manifest-sharepoint") {
-    const body = await readBody(req);
-    const manifest = await buildFolderManifest(config, body.folderUrl);
-    await store.upsertFolders(manifest.folders || []);
-    await store.upsertVideos(manifest.videos || []);
-    return { ok: true, manifest };
-  }
-  if (req.method === "POST" && url.pathname === "/api/manifest-sharepoint-rest") {
-    const body = await readBody(req);
-    const manifest = await buildRestFolderManifest(config, body.serverRelativeUrl);
-    await store.upsertFolders(manifest.folders || []);
-    await store.upsertVideos(manifest.videos || []);
-    return { ok: true, manifest };
-  }
-  if (req.method === "POST" && url.pathname === "/api/ingest-oldest-sharepoint-folder") {
-    const folder = await pickOldestFolder(config);
-    const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl);
-    await store.upsertFolders(manifest.folders || []);
-    await store.upsertVideos(manifest.videos || []);
-    return { ok: true, selectedFolder: manifest.folders[0], videos: manifest.videos.length };
-  }
-  if (req.method === "POST" && url.pathname === "/api/prepare-folder") {
-    const body = await readBody(req);
-    return prepareEventFolder(config, store, {
-      folderId: body.folderId,
-      serverRelativeUrl: body.serverRelativeUrl
-    });
-  }
-  if (req.method === "POST" && url.pathname === "/api/process-folder") {
-    const body = await readBody(req);
-    return processFolder(config, store, body.folderId, { parallel: body.parallel || 1 });
-  }
-  if (req.method === "POST" && url.pathname === "/api/relabel-folder") {
-    const body = await readBody(req);
-    return relabelFolder(config, store, body.folderId);
-  }
-  if (req.method === "POST" && url.pathname === "/api/review-video") {
-    const body = await readBody(req);
-    return reviewVideo(body);
-  }
-  if (req.method === "POST" && url.pathname === "/api/export-lean") {
-    const result = await store.exportLean();
-    return { ok: true, exportPath: result.exportPath, counts: countStore(result.lean) };
-  }
-  if (req.method === "POST" && url.pathname === "/api/sync-metadata") {
-    return syncMetadataBackend(config, await store.read());
-  }
-  return { error: "Not found" };
+function asyncRoute(fn) {
+  return async (req, res, next) => {
+    try {
+      const result = await fn(req, res);
+      if (!res.headersSent) res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 async function reviewVideo(body) {
@@ -283,30 +273,12 @@ async function eventDetail(folderId) {
   };
 }
 
-async function serveStatic(res, pathname) {
-  const safePath = pathname === "/" ? "/index.html" : pathname;
-  const filePath = path.join(config.rootDir, "public", safePath.replace(/^\/+/, ""));
-  let content;
-  try {
-    content = await fs.readFile(filePath);
-  } catch (error) {
-    if (error.code === "ENOENT") return sendJson(res, { error: "Not found" }, 404);
-    throw error;
-  }
-  const type = filePath.endsWith(".css") ? "text/css"
-    : filePath.endsWith(".js") ? "text/javascript"
-    : "text/html";
-  res.writeHead(200, { "content-type": type });
-  res.end(content);
-}
-
 async function serveMedia(req, res, videoId) {
   const state = await store.read();
   const video = state.videos.find((item) => item.id === videoId);
-  if (!video) return sendJson(res, { error: "Video not found" }, 404);
+  if (!video) return res.status(404).json({ error: "Video not found" });
   if (!video.localVideoPath) {
-    res.writeHead(302, { location: video.sharepointUrl });
-    return res.end();
+    return res.redirect(302, video.sharepointUrl);
   }
   const stat = await fs.stat(video.localVideoPath);
   const range = req.headers.range;
@@ -333,24 +305,12 @@ async function serveMedia(req, res, videoId) {
 function pipeMediaStream(stream, res) {
   stream.on("error", () => {
     if (!res.headersSent) {
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "Media read failed" }));
+      res.status(500).json({ error: "Media read failed" });
       return;
     }
     res.destroy();
   });
   return stream.pipe(res);
-}
-
-async function readBody(req) {
-  let raw = "";
-  for await (const chunk of req) raw += chunk;
-  return raw ? JSON.parse(raw) : {};
-}
-
-function sendJson(res, value, status = 200) {
-  res.writeHead(status, { "content-type": "application/json" });
-  res.end(JSON.stringify(value, null, 2));
 }
 
 function countStore(state) {

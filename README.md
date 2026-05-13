@@ -16,6 +16,7 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 ## Current Capabilities
 
 - Dependency-light Node web app and CLI.
+- Express backend for API routes, static files, JSON parsing, 404s, error handling, and media range streaming.
 - Local JSON index with lean export.
 - Manual/sample manifest import.
 - Microsoft Graph adapter for SharePoint listing when credentials are configured.
@@ -88,6 +89,12 @@ npm run cli -- sync-metadata
 ```
 
 The sync writes prefixed Firestore collections for folders, videos, events, jobs, and store metadata. This keeps local media/transcripts out of the hosted database while making the searchable index publishable.
+
+## Deployment Notes
+
+The backend is an Express app. That works directly on server runtimes such as Cloud Run, Render, Fly, Railway, or any container host. For Vercel, deploy the Express app through a serverless function or move the route handlers into Vercel API routes. For Firebase, use Firebase Hosting rewrites to Cloud Functions or Cloud Run; Firebase Hosting alone is static and cannot run the API.
+
+The publishable version should avoid hosting videos. Use Firestore or `data/exports/lean-index.json` for metadata/search, and keep playback links pointed at SharePoint.
 
 ## Credential Notes
 
