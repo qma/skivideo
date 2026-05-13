@@ -212,10 +212,33 @@ select {
   gap: 5px;
 }
 
-.eventActions button {
+.eventActions button,
+.actionLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 28px;
   padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
   font-size: 12px;
+  text-decoration: none;
+}
+
+.subtleActionLink {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--accent-dark);
+}
+
+.actionLink:hover {
+  background: var(--accent-dark);
+}
+
+.subtleActionLink:hover {
+  background: #eef5f4;
 }
 
 .statusBadge {

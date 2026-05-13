@@ -1,4 +1,5 @@
 import { nowIso, stableId } from "../lib/ids.mjs";
+import { ensureFolderManifest, ensureLiveTimingCorrelation } from "./eventDependencies.mjs";
 import { cacheTranscript, mirrorVideo, extractAudio } from "../adapters/media.mjs";
 import { transcribeAudio } from "../adapters/transcription.mjs";
 import { labelVideoAthletes } from "./labeler.mjs";
@@ -19,10 +20,48 @@ export async function processFolder(config, store, folderId, options = {}) {
     message: `Processing started with ${parallel} worker${parallel === 1 ? "" : "s"}`
   });
 
-  const state = await store.read();
-  const folder = state.folders.find((item) => item.id === folderId);
+  let state = await store.read();
+  let folder = state.folders.find((item) => item.id === folderId);
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
-  const videos = state.videos.filter((video) => video.folderId === folderId);
+  await store.updateJob(jobId, {
+    message: "Ensuring SharePoint manifest dependency",
+    parallel
+  });
+  const manifest = await ensureFolderManifest(config, store, folderId);
+  if (manifest.imported) {
+    await store.updateJob(jobId, {
+      message: `${manifest.message}; ensuring Live-Timing dependency`,
+      parallel
+    });
+  }
+  const liveTiming = await ensureLiveTimingCorrelation(config, store, folderId);
+  if (!liveTiming.skipped) {
+    await store.updateJob(jobId, {
+      message: `${liveTiming.message}; starting media processing`,
+      parallel
+    });
+  } else {
+    await store.updateJob(jobId, {
+      message: "Dependencies ready; starting media processing",
+      parallel
+    });
+  }
+
+  state = await store.read();
+  folder = state.folders.find((item) => item.id === folderId);
+  let videos = state.videos.filter((video) => video.folderId === folderId);
+  if (!videos.length) {
+    await store.updateJob(jobId, {
+      status: "completed_with_errors",
+      message: "No videos found for this folder. Import the SharePoint folder manifest or choose a folder that contains video files.",
+      completedAt: nowIso(),
+      indexed: 0,
+      needsReview: 0,
+      failed: 0,
+      parallel
+    });
+    return { jobId, indexed: 0, needsReview: 0, failed: 0, parallel, videos: 0 };
+  }
   let indexed = 0;
   let needsReview = 0;
   let failed = 0;

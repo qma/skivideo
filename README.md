@@ -30,7 +30,7 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 - Local whisper.cpp transcription fallback using `/opt/homebrew/bin/whisper-cli` and `data/models/ggml-base.en.bin` when MLX/Metal is unavailable to the runner.
 - OpenAI transcription and labeler hooks as optional fallbacks when `OPENAI_API_KEY` is available.
 - Event detail view with status/confidence filters, event-local search, Live-Timing assets, app playback links, source SharePoint links, and embedded local video players.
-- Event list actions include mouse-over tooltips. `View` opens the event table without network processing, `Prepare` runs low-data event prep, `Live` refreshes only Live-Timing correlation, and `Process` starts download/transcription/indexing with four workers by default.
+- Event list actions are ordered by dependency with mouse-over tooltips: `View` ensures the SharePoint video list and opens the event table, `Live` refreshes race correlation, `Prepare` runs View/Live dependencies plus metadata relabeling, and `Process` runs all dependencies before download/transcription/indexing with four workers by default.
 - Event review controls for manual athlete correction and label clearing without media downloads.
 - Lazy web loading: startup reads `/api/summary`, selected events read `/api/event?folderId=...`, and global search reads `/api/search` instead of loading the full store into the browser.
 - Background processing from the web UI returns immediately and the Jobs panel refreshes while processing is running, so progress is visible without waiting on a single long HTTP response.

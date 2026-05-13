@@ -11,10 +11,10 @@ const state = {
 };
 
 const actionTips = {
-  view: "Open this event's video table. Does not download media.",
-  prepare: "Low-data setup: correlate Live-Timing, parse racer rosters/assets, and relabel from existing metadata. Does not download videos.",
-  process: "Download/mirror videos, extract audio, transcribe, label, and update the index. Starts with parallel 4 by default.",
-  live: "Refresh only Live-Timing race correlation, racer roster, and linked assets. Does not download videos."
+  view: "Ensure the SharePoint video list if missing, then open this event's table. Does not download media.",
+  live: "Refresh Live-Timing race correlation, racer roster, and linked assets. Does not download media.",
+  prepare: "Run View and Live dependencies if needed, then relabel from existing metadata/transcripts. Does not download media.",
+  process: "Run View, Live, and Prepare dependencies if needed, then download/mirror videos, transcribe, label, and update the index with parallel 4."
 };
 
 const el = (id) => document.getElementById(id);
@@ -25,6 +25,7 @@ async function init() {
   bindActions();
   state.config = await api("/api/config");
   await refresh();
+  await runUrlAction();
 }
 
 function bindActions() {
@@ -134,35 +135,15 @@ function renderFolders() {
           <span>${stats.needsReview || 0} review · ${stats.failed || 0} failed</span>
         </div>
         <div class="eventActions">
-          <button data-view-event="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.view)}" aria-label="${escapeAttr(actionTips.view)}">View</button>
-          <button class="subtleButton" data-prepare="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</button>
-          <button class="subtleButton" data-process="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</button>
-          <button class="subtleButton" data-correlate="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</button>
+          <a class="actionLink" href="${escapeAttr(actionHref("view", folder.id))}" title="${escapeAttr(actionTips.view)}" aria-label="${escapeAttr(actionTips.view)}">View</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("live", folder.id))}" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
         </div>
       </article>
     `;
   }).join("")}
   ` : `<p class="muted">No folders indexed yet.</p>`;
-
-  for (const button of document.querySelectorAll("[data-process]")) {
-    button.addEventListener("click", () => startProcessing(button.dataset.process));
-  }
-  for (const button of document.querySelectorAll("[data-prepare]")) {
-    button.addEventListener("click", () => action("/api/prepare-folder", { folderId: button.dataset.prepare }));
-  }
-  for (const button of document.querySelectorAll("[data-view-event]")) {
-    button.addEventListener("click", async () => {
-      state.selectedFolderId = button.dataset.viewEvent;
-      state.eventQuery = "";
-      state.eventStatus = "";
-      state.eventConfidence = "";
-      await refresh();
-      el("eventViewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }
-  for (const button of document.querySelectorAll("[data-correlate]")) {
-    button.addEventListener("click", () => action("/api/correlate-folder-live-timing", { folderId: button.dataset.correlate }));
-  }
 }
 
 function renderEventView() {
@@ -298,7 +279,7 @@ function eventVideoMatchesFilters(video) {
 function renderJobsAndEvents() {
   const jobs = state.summary.jobs.slice(0, 8).map((job) => `
     <article class="item">
-      <strong>${escapeHtml(job.type)}</strong>
+      <strong>${escapeHtml([job.type, job.folderName].filter(Boolean).join(" · "))}</strong>
       <p>${escapeHtml(job.status)} · ${escapeHtml(job.message || "")}</p>
     </article>
   `).join("") || `<p class="muted">No jobs yet.</p>`;
@@ -361,6 +342,50 @@ async function action(path, body = {}, options = {}) {
 async function startProcessing(folderId) {
   const result = await action("/api/process-folder-async", { folderId, parallel: 4 });
   if (result?.ok) scheduleJobPolling(true);
+}
+
+async function runUrlAction() {
+  const params = new URLSearchParams(window.location.search);
+  const actionName = params.get("action");
+  const folderId = params.get("folderId");
+  if (!actionName || !folderId) return;
+  window.history.replaceState({}, "", window.location.pathname);
+  if (actionName === "view") {
+    await openEvent(folderId);
+  } else if (actionName === "live") {
+    await action("/api/correlate-folder-live-timing", { folderId });
+  } else if (actionName === "prepare") {
+    await action("/api/prepare-folder", { folderId });
+  } else if (actionName === "process") {
+    await startProcessing(folderId);
+  }
+}
+
+async function openEvent(folderId) {
+  const ready = await ensureViewManifest(folderId);
+  if (!ready) return;
+  state.selectedFolderId = folderId;
+  state.eventQuery = "";
+  state.eventStatus = "";
+  state.eventConfidence = "";
+  await refresh();
+  el("eventViewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function ensureViewManifest(folderId) {
+  const folder = state.summary?.folders?.find((item) => item.id === folderId);
+  if ((folder?.stats?.videoCount || 0) > 0) return true;
+  try {
+    await api("/api/ensure-folder-manifest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ folderId })
+    });
+    return true;
+  } catch (error) {
+    showLog({ error: error.message });
+    return false;
+  }
 }
 
 function scheduleJobPolling(force = false) {
@@ -432,4 +457,8 @@ function normalizeClientText(value) {
 
 function playbackHref(video) {
   return `/media/${encodeURIComponent(video.id)}`;
+}
+
+function actionHref(actionName, folderId) {
+  return `/?action=${encodeURIComponent(actionName)}&folderId=${encodeURIComponent(folderId)}`;
 }

@@ -8,9 +8,10 @@ import { JsonStore } from "./lib/fsStore.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, establishSharePointSession, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
-import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
+import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
 import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
+import { ensureFolderManifest, ensureLiveTimingCorrelation } from "./pipeline/eventDependencies.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -47,27 +48,14 @@ app.post("/api/fetch-events", asyncRoute(async () => {
 }));
 app.post("/api/fetch-live-timing", asyncRoute((req) => fetchLiveTimingSearch(config, req.body.query || "")));
 app.post("/api/correlate-folder-live-timing", asyncRoute(async (req) => {
-  const state = await store.read();
-  const folder = state.folders.find((item) => item.id === req.body.folderId);
-  if (!folder) throw new Error(`Folder not found: ${req.body.folderId}`);
-  const correlation = await correlateFolderWithLiveTiming(config, folder);
-  await store.updateFolder(req.body.folderId, {
-    candidateRoster: correlation.candidateRoster,
-    raceAssets: correlation.assets,
-    eventMatch: {
-      ...(folder.eventMatch || {}),
-      liveTimingMatch: correlation.liveTimingMatches[0] ? serializeLiveTimingMatch(correlation.liveTimingMatches[0]) : null,
-      liveTimingMatches: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
-      sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
-    }
-  });
+  const correlation = await ensureLiveTimingCorrelation(config, store, req.body.folderId, { force: true });
   return {
     ok: true,
     folderId: req.body.folderId,
     query: correlation.query,
-    races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
-    candidateRoster: correlation.candidateRoster.length,
-    tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
+    races: correlation.races,
+    candidateRoster: correlation.candidateRoster,
+    tptRoster: correlation.tptRoster,
     assets: correlation.assets
   };
 }));
@@ -104,6 +92,7 @@ app.post("/api/prepare-folder", asyncRoute((req) => prepareEventFolder(config, s
   folderId: req.body.folderId,
   serverRelativeUrl: req.body.serverRelativeUrl
 })));
+app.post("/api/ensure-folder-manifest", asyncRoute((req) => ensureFolderManifest(config, store, req.body.folderId)));
 app.post("/api/process-folder", asyncRoute((req) => processFolder(config, store, req.body.folderId, {
   parallel: req.body.parallel || 4
 })));
@@ -222,6 +211,7 @@ async function search(query) {
 
 async function summary() {
   const state = await store.read();
+  const foldersById = new Map(state.folders.map((folder) => [folder.id, folder]));
   const folderStats = new Map(state.folders.map((folder) => [folder.id, {
     videoCount: 0,
     indexed: 0,
@@ -276,8 +266,20 @@ async function summary() {
         labels: 0
       }
     })),
-    jobs: state.jobs.slice(0, 8),
+    jobs: state.jobs.slice(0, 8).map((job) => summarizeJob(job, foldersById)),
     events: state.events.slice(0, 12)
+  };
+}
+
+function summarizeJob(job, foldersById) {
+  const staleAfterMs = 60 * 60 * 1000;
+  const updatedAt = Date.parse(job.updatedAt || job.startedAt || "");
+  const isStale = job.status === "running" && Number.isFinite(updatedAt) && Date.now() - updatedAt > staleAfterMs;
+  return {
+    ...job,
+    status: isStale ? "stale" : job.status,
+    folderName: foldersById.get(job.folderId)?.name || "",
+    stale: isStale
   };
 }
 
@@ -371,18 +373,5 @@ function countStore(state) {
     folders: state.folders?.length || 0,
     events: state.events?.length || 0,
     videos: state.videos?.length || 0
-  };
-}
-
-function serializeLiveTimingMatch(match) {
-  return {
-    raceId: match.race.raceId,
-    name: match.race.name,
-    gender: match.race.gender,
-    type: match.race.type,
-    resort: match.race.resort,
-    date: match.race.date,
-    confidence: match.confidence,
-    sourceUrl: match.race.sourceUrl
   };
 }

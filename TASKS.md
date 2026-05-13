@@ -3,7 +3,7 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Clarify event action buttons, default web processing to four workers, and expose live job progress while processing runs.
+- Organize event actions by dependency and make each action execute unmet dependencies automatically.
 
 ## Completed
 
@@ -53,6 +53,17 @@
 - Web UI `Process` now starts a background processing job with `parallel: 4` by default.
 - The Jobs panel now refreshes while jobs are running, giving live progress from the existing job records instead of blocking on one long request.
 - Browser validation passed for event action tooltips on the compact chronological event list.
+- Diagnosed the Jan 10 Northstar Top click: the browser route did start a `parallel: 4` job, but the folder had zero local video records, so processing completed immediately with no media work.
+- `process-folder` now imports the SharePoint folder manifest automatically when a folder has zero local video records, then continues into media download/transcription/indexing.
+- Event list actions are normal links with `?action=...&folderId=...`, then the app executes the action on load and clears the URL. This avoids click-handler reliability issues in browser validation.
+- Jan 10 Northstar Top processing completed through the web processing endpoint: 99 processed, 16 indexed, 83 review, 0 failed, 75 local videos/transcripts.
+- Event action order changed to `View`, `Live`, `Prepare`, `Process`.
+- `View` now imports the SharePoint video list if the event has no local video records, then opens the event table.
+- `Prepare` now ensures the SharePoint video list and Live-Timing correlation before metadata-only relabeling.
+- `Process` now ensures SharePoint manifest and Live-Timing dependencies before media download/transcription/indexing.
+- Browser validation passed for link-based `View`: Jan 11 opened through `?action=view&folderId=...`, imported 135 SharePoint video records, rendered the event view, and cleared the URL.
+- Browser validation passed for link-based `Process`: Jan 11 started `job_06e67edd6e79c2cf` with `parallel: 4` and showed the running job in the Jobs panel.
+- Jan 11 Northstar Day 3 processing completed through the browser-triggered process workflow: 135 processed, 34 indexed, 101 review, 0 failed, 135 local videos/transcripts.
 
 ## In Progress
 
