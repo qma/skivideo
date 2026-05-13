@@ -95,6 +95,9 @@
 - Local media stats now count only readable local files, and event preview titles distinguish playable local media from source fallback.
 - Added `audit-media-links` CLI command. Current audit: 759 checked, 759 OK, 0 broken; 478 readable local, 254 dataless local with fallback, 279 missing local with fallback, 2 sample source-only fallbacks.
 - Verified the reported `P1000316.MP4` / `GS Race Jan 10. Northstar Day 2` app link now responds through `/media/video_2c543fe6e63efbef` with `content-type: video/mp4`.
+- Hardened cache download writes: downloads now stream to a hidden temp file, validate non-empty/readable/non-dataless content and `content-length` when present, then atomically rename into the cache path.
+- `mirrorVideo` and `extractAudio` now re-create dataless or unreadable cached files instead of trusting an existing path.
+- Download validation test passed: a successful local test download was promoted, while a short/incomplete response left no target file and no temp file.
 
 ## In Progress
 
