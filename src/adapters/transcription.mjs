@@ -5,9 +5,18 @@ import { slugify } from "../lib/ids.mjs";
 import { resolveFfmpeg } from "./media.mjs";
 
 export async function detectTranscriptionBackends(config) {
+  const whisperCpp = await whisperCppWorks(config);
+  if (whisperCpp && process.env.TRANSCRIPTION_BACKEND !== "mlx") {
+    return {
+      mlxWhisper: false,
+      whisperCpp,
+      openai: Boolean(config.openaiApiKey)
+    };
+  }
   const mlxPython = path.join(config.rootDir, ".venv", "bin", "python");
   return {
-    mlxWhisper: await executableWorks(mlxPython, ["-c", "import mlx_whisper; print('ok')"]),
+    mlxWhisper: await executableWorks(mlxPython, ["-c", "import mlx_whisper; print('ok')"], { timeoutMs: 60000 }),
+    whisperCpp,
     openai: Boolean(config.openaiApiKey)
   };
 }
@@ -15,8 +24,9 @@ export async function detectTranscriptionBackends(config) {
 export async function transcribeAudio(config, audioPath, options = {}) {
   const backends = await detectTranscriptionBackends(config);
   if (backends.mlxWhisper) return transcribeWithMlxWhisper(config, audioPath, options);
+  if (backends.whisperCpp) return transcribeWithWhisperCpp(config, audioPath, options);
   if (backends.openai) return transcribeWithOpenAi(config, audioPath);
-  throw new Error("No transcription backend is available. Run scripts/install-whisper.sh for local MLX Whisper.");
+  throw new Error("No transcription backend is available. Run scripts/install-whisper.sh or install whisper.cpp with a ggml model.");
 }
 
 export async function transcribeWithMlxWhisper(config, audioPath, options = {}) {
@@ -90,10 +100,84 @@ export async function transcribeWithOpenAi(config, audioPath) {
   };
 }
 
-async function executableWorks(command, args) {
+export async function transcribeWithWhisperCpp(config, audioPath, options = {}) {
+  const command = process.env.WHISPER_CPP_BIN || "/opt/homebrew/bin/whisper-cli";
+  const model = options.model || process.env.WHISPER_CPP_MODEL || path.join(config.dataDir, "models", "ggml-base.en.bin");
+  const inputPath = await ensureWhisperCppAudio(config, audioPath);
+  const outDir = path.join(config.transcriptDir, slugify(path.basename(audioPath)));
+  await fs.mkdir(outDir, { recursive: true });
+  const outputBase = path.join(outDir, "whisper-cpp");
+  await run(command, [
+    "-ng",
+    "-m", model,
+    "-f", inputPath,
+    "-oj",
+    "-ojf",
+    "-of", outputBase,
+    "-np",
+    "-l", "en"
+  ], { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
+  const outPath = `${outputBase}.json`;
+  const raw = JSON.parse(await fs.readFile(outPath, "utf8"));
+  const segments = (raw.transcription || []).map((segment) => ({
+    start: whisperTimeToSeconds(segment.offsets?.from),
+    end: whisperTimeToSeconds(segment.offsets?.to),
+    text: segment.text || ""
+  }));
+  return {
+    source: "local_whisper_cpp",
+    text: segments.map((segment) => segment.text).join(" ").replace(/\s+/g, " ").trim(),
+    segments,
+    localPath: outPath,
+    model
+  };
+}
+
+async function whisperCppWorks(config) {
+  const command = process.env.WHISPER_CPP_BIN || "/opt/homebrew/bin/whisper-cli";
+  const model = process.env.WHISPER_CPP_MODEL || path.join(config.dataDir, "models", "ggml-base.en.bin");
   try {
     await fs.access(command);
-    await run(command, args, { timeoutMs: 10000 });
+    await fs.access(model);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureWhisperCppAudio(config, audioPath) {
+  if (/\.(wav|mp3|flac|ogg)$/i.test(audioPath)) return audioPath;
+  const ffmpeg = await resolveFfmpeg(config);
+  const outPath = path.join(config.audioDir, `${slugify(path.basename(audioPath))}.wav`);
+  try {
+    await fs.access(outPath);
+    return outPath;
+  } catch {
+    await fs.mkdir(path.dirname(outPath), { recursive: true });
+  }
+  await run(ffmpeg, [
+    "-y",
+    "-i", audioPath,
+    "-vn",
+    "-ac", "1",
+    "-ar", "16000",
+    "-c:a", "pcm_s16le",
+    outPath
+  ]);
+  return outPath;
+}
+
+function whisperTimeToSeconds(value) {
+  if (typeof value === "number") return value / 1000;
+  const match = String(value || "").match(/(\d+):(\d+):(\d+)[.,](\d+)/);
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) + Number(`0.${match[4]}`);
+}
+
+async function executableWorks(command, args, options = {}) {
+  try {
+    await fs.access(command);
+    await run(command, args, { timeoutMs: options.timeoutMs || 10000 });
     return true;
   } catch {
     return false;

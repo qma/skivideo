@@ -9,4 +9,5 @@ data/raw/
 data/index/
 data/exports/
 data/tools/
+data/models/
 *.log

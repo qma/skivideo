@@ -37,6 +37,7 @@
 - Event table review workflow added for low-confidence/unlabeled videos: manual athlete labels and clear-labels actions save through `/api/review-video` without downloading media.
 - Jan 10 event view verified in low-data mode: 130 SharePoint-only videos render in the event table with Live-Timing assets, roster-backed labels, and manual review controls.
 - Web app loading changed to lazy metadata endpoints: startup uses compact `/api/summary`, event view uses `/api/event?folderId=...`, and search uses `/api/search` so the browser does not load every video/transcript record at once.
+- whisper.cpp fallback added and validated with `ggml-base.en.bin` because MLX Whisper is installed but cannot access Metal from this runner.
 
 ## In Progress
 
