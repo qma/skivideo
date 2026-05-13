@@ -81,6 +81,9 @@
 - whisper.cpp transcription now omits `-ng` by default so Metal/GPU can be used when available.
 - Added explicit CPU-only controls: `WHISPER_CPP_NO_GPU=1`, CLI `--whisper-cpp-no-gpu`/`--no-whisper-gpu`, and API `whisperCppNoGpu: true`.
 - whisper.cpp transcript metadata now records whether GPU acceleration was enabled for that run.
+- GS Camp April 25 web-triggered processing completed: 19 videos, 19 local media/transcripts, 0 indexed, 19 review, 0 failed.
+- Fixed concurrent `store.json` read/write failures by writing JSON atomically through temp-file rename, retrying transient JSON reads, and serializing store mutation methods.
+- Web app restarted after the GS Camp April 25 job completed; browser reload confirmed the app renders without the JSON parse error.
 
 ## In Progress
 

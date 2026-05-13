@@ -15,6 +15,8 @@ export class JsonStore {
   constructor(config) {
     this.config = config;
     this.storePath = path.join(config.indexDir, "store.json");
+    this.writeQueue = Promise.resolve();
+    this.mutationQueue = Promise.resolve();
   }
 
   async ensure() {
@@ -37,92 +39,133 @@ export class JsonStore {
 
   async read() {
     await this.ensure();
-    const raw = await fs.readFile(this.storePath, "utf8");
-    return { ...emptyStore, ...JSON.parse(raw) };
+    const raw = await readJsonWithRetry(this.storePath);
+    return { ...emptyStore, ...raw };
   }
 
   async write(store) {
-    await fs.mkdir(path.dirname(this.storePath), { recursive: true });
     const next = { ...emptyStore, ...store, updatedAt: nowIso() };
-    await fs.writeFile(this.storePath, `${JSON.stringify(next, null, 2)}\n`);
+    const write = this.writeQueue.then(() => writeJsonAtomic(this.storePath, next));
+    this.writeQueue = write.catch(() => {});
+    await write;
     return next;
   }
 
   async upsertFolders(folders) {
-    const store = await this.read();
-    const byId = new Map(store.folders.map((folder) => [folder.id, folder]));
-    for (const folder of folders) {
-      const existing = byId.get(folder.id);
-      byId.set(folder.id, mergeFolder(existing, folder));
-    }
-    store.folders = [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    return this.write(store);
+    return this.mutate((store) => {
+      const byId = new Map(store.folders.map((folder) => [folder.id, folder]));
+      for (const folder of folders) {
+        const existing = byId.get(folder.id);
+        byId.set(folder.id, mergeFolder(existing, folder));
+      }
+      store.folders = [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      return store;
+    });
   }
 
   async updateFolder(folderId, patch) {
-    const store = await this.read();
-    store.folders = store.folders.map((folder) => folder.id === folderId ? deepMerge(folder, patch) : folder);
-    return this.write(store);
+    return this.mutate((store) => {
+      store.folders = store.folders.map((folder) => folder.id === folderId ? deepMerge(folder, patch) : folder);
+      return store;
+    });
   }
 
   async upsertVideos(videos) {
-    const store = await this.read();
-    const byId = new Map(store.videos.map((video) => [video.id, video]));
-    for (const video of videos) byId.set(video.id, { ...byId.get(video.id), ...video });
-    store.videos = [...byId.values()].sort((a, b) => String(a.filename).localeCompare(String(b.filename)));
-    return this.write(store);
+    return this.mutate((store) => {
+      const byId = new Map(store.videos.map((video) => [video.id, video]));
+      for (const video of videos) byId.set(video.id, { ...byId.get(video.id), ...video });
+      store.videos = [...byId.values()].sort((a, b) => String(a.filename).localeCompare(String(b.filename)));
+      return store;
+    });
   }
 
   async upsertEvents(events) {
-    const store = await this.read();
-    const byKey = new Map(store.events.map((event) => [event.id || `${event.date}:${event.name}`, event]));
-    for (const event of events) byKey.set(event.id || `${event.date}:${event.name}`, event);
-    store.events = [...byKey.values()];
-    return this.write(store);
+    return this.mutate((store) => {
+      const byKey = new Map(store.events.map((event) => [event.id || `${event.date}:${event.name}`, event]));
+      for (const event of events) byKey.set(event.id || `${event.date}:${event.name}`, event);
+      store.events = [...byKey.values()];
+      return store;
+    });
   }
 
   async updateVideo(videoId, patch) {
-    const store = await this.read();
-    store.videos = store.videos.map((video) => video.id === videoId ? deepMerge(video, patch) : video);
-    return this.write(store);
+    return this.mutate((store) => {
+      store.videos = store.videos.map((video) => video.id === videoId ? deepMerge(video, patch) : video);
+      return store;
+    });
   }
 
   async updateVideoWith(fn) {
-    const store = await this.read();
-    const next = fn(store);
-    return this.write(next || store);
+    return this.mutate((store) => fn(store) || store);
   }
 
   async addJob(job) {
-    const store = await this.read();
-    const nextJob = {
-      ...job,
-      logs: normalizeJobLogs(job, job.logs)
-    };
-    store.jobs = [nextJob, ...store.jobs.filter((existing) => existing.id !== job.id)].slice(0, 50);
-    return this.write(store);
+    return this.mutate((store) => {
+      const nextJob = {
+        ...job,
+        logs: normalizeJobLogs(job, job.logs)
+      };
+      store.jobs = [nextJob, ...store.jobs.filter((existing) => existing.id !== job.id)].slice(0, 50);
+      return store;
+    });
   }
 
   async updateJob(jobId, patch) {
-    const store = await this.read();
-    const updatedAt = nowIso();
-    store.jobs = store.jobs.map((job) => {
-      if (job.id !== jobId) return job;
-      const nextJob = { ...job, ...patch, updatedAt };
-      nextJob.logs = appendJobLog(job, nextJob, updatedAt);
-      return nextJob;
+    return this.mutate((store) => {
+      const updatedAt = nowIso();
+      store.jobs = store.jobs.map((job) => {
+        if (job.id !== jobId) return job;
+        const nextJob = { ...job, ...patch, updatedAt };
+        nextJob.logs = appendJobLog(job, nextJob, updatedAt);
+        return nextJob;
+      });
+      return store;
     });
-    return this.write(store);
   }
 
   async exportLean() {
     const store = await this.read();
     const lean = buildLeanStore(store);
     const exportPath = path.join(this.config.exportDir, "lean-index.json");
-    await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    await fs.writeFile(exportPath, `${JSON.stringify(lean, null, 2)}\n`);
+    await writeJsonAtomic(exportPath, lean);
     return { exportPath, lean };
   }
+
+  async mutate(fn) {
+    const operation = this.mutationQueue.then(async () => {
+      const store = await this.read();
+      const next = await fn(store);
+      return this.write(next || store);
+    });
+    this.mutationQueue = operation.catch(() => {});
+    return operation;
+  }
+}
+
+async function readJsonWithRetry(filePath) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const raw = await fs.readFile(filePath, "utf8");
+      return JSON.parse(raw);
+    } catch (error) {
+      lastError = error;
+      if (error.name !== "SyntaxError" && error.code !== "ENOENT") throw error;
+      await delay(25 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+async function writeJsonAtomic(filePath, value) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`);
+  await fs.writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`);
+  await fs.rename(tempPath, filePath);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function buildLeanStore(store) {
