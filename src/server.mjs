@@ -246,7 +246,7 @@ async function summary() {
     if (!stats) continue;
     stats.videoCount += 1;
     stats.labels += labelCount;
-    if (video.localVideoPath) stats.localVideo += 1;
+    if (video.localVideoPath && await readableLocalMedia(video.localVideoPath)) stats.localVideo += 1;
     if (video.transcript?.text) stats.transcripts += 1;
     const status = video.processing?.status || "pending";
     if (status === "indexed") stats.indexed += 1;
@@ -345,16 +345,17 @@ async function eventDetail(folderId) {
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
   return {
     folder,
-    videos: state.videos
+    videos: await Promise.all(state.videos
       .filter((video) => video.folderId === folderId)
-      .map((video) => ({
-        ...video,
-        transcript: video.transcript ? {
-          source: video.transcript.source,
-          text: String(video.transcript.text || "").slice(0, 500),
-          segments: []
-        } : video.transcript
-      }))
+      .map(async (video) => ({
+          ...video,
+          localVideoPlayable: Boolean(video.localVideoPath && await readableLocalMedia(video.localVideoPath)),
+          transcript: video.transcript ? {
+            source: video.transcript.source,
+            text: String(video.transcript.text || "").slice(0, 500),
+            segments: []
+          } : video.transcript
+        })))
   };
 }
 
@@ -362,30 +363,43 @@ async function serveMedia(req, res, videoId) {
   const state = await store.read();
   const video = state.videos.find((item) => item.id === videoId);
   if (!video) return res.status(404).json({ error: "Video not found" });
-  if (!video.localVideoPath) {
+  const localMedia = video.localVideoPath ? await readableLocalMedia(video.localVideoPath) : null;
+  if (!localMedia) {
     if (video.downloadUrl) return proxySharePointMedia(req, res, video);
     return res.redirect(302, video.sharepointUrl);
   }
-  const stat = await fs.stat(video.localVideoPath);
   const range = req.headers.range;
   if (!range) {
     res.writeHead(200, {
-      "content-length": stat.size,
+      "content-length": localMedia.stat.size,
       "content-type": video.mimeType || "video/mp4",
       "accept-ranges": "bytes"
     });
+    if (req.method === "HEAD") return res.end();
     return pipeMediaStream(fsSync.createReadStream(video.localVideoPath), res);
   }
   const match = range.match(/bytes=(\d+)-(\d*)/);
   const start = match ? Number(match[1]) : 0;
-  const end = match && match[2] ? Number(match[2]) : stat.size - 1;
+  const end = match && match[2] ? Number(match[2]) : localMedia.stat.size - 1;
   res.writeHead(206, {
-    "content-range": `bytes ${start}-${end}/${stat.size}`,
+    "content-range": `bytes ${start}-${end}/${localMedia.stat.size}`,
     "accept-ranges": "bytes",
     "content-length": end - start + 1,
     "content-type": video.mimeType || "video/mp4"
   });
+  if (req.method === "HEAD") return res.end();
   return pipeMediaStream(fsSync.createReadStream(video.localVideoPath, { start, end }), res);
+}
+
+async function readableLocalMedia(localPath) {
+  try {
+    const stat = await fs.stat(localPath);
+    if (!stat.isFile() || stat.size <= 0) return null;
+    if (Number(stat.blocks) === 0) return null;
+    return { stat };
+  } catch {
+    return null;
+  }
 }
 
 async function proxySharePointMedia(req, res, video) {
@@ -403,7 +417,11 @@ async function proxySharePointMedia(req, res, video) {
     const value = response.headers.get(key);
     if (value) passthroughHeaders[key] = value;
   }
+  if (!passthroughHeaders["content-type"] || passthroughHeaders["content-type"] === "application/octet-stream") {
+    passthroughHeaders["content-type"] = video.mimeType || contentTypeForFilename(video.filename);
+  }
   res.writeHead(response.status, passthroughHeaders);
+  if (req.method === "HEAD") return res.end();
   return pipeMediaStream(Readable.fromWeb(response.body), res);
 }
 
@@ -421,6 +439,14 @@ function pipeMediaStream(stream, res) {
     res.destroy();
   });
   return stream.pipe(res);
+}
+
+function contentTypeForFilename(filename) {
+  const value = String(filename || "").toLowerCase();
+  if (value.endsWith(".mov")) return "video/quicktime";
+  if (value.endsWith(".webm")) return "video/webm";
+  if (value.endsWith(".m4v")) return "video/x-m4v";
+  return "video/mp4";
 }
 
 function countStore(state) {

@@ -204,7 +204,7 @@ function renderEventView() {
             controls
             preload="metadata"
             playsinline
-            title="${escapeAttr(video.localVideoPath ? "Local cached media" : "Source media fallback")}"></video>
+            title="${escapeAttr(video.localVideoPlayable ? "Local cached media" : "Source media fallback")}"></video>
         </td>
         <td>
           <strong>${escapeHtml(video.filename)}</strong>

@@ -39,6 +39,7 @@ async function main(cmd, args) {
   if (cmd === "relabel-folder") return relabelFolderCommand(args);
   if (cmd === "process-video") return processSingleVideo(args[0]);
   if (cmd === "export-lean") return printJson(await store.exportLean());
+  if (cmd === "audit-media-links") return auditMediaLinks(args);
   if (cmd === "sync-metadata") return printJson(await syncMetadataBackend(config, await store.read()));
   if (cmd === "search") return search(args.join(" "));
   if (cmd === "backends") return printJson(await detectTranscriptionBackends(config));
@@ -252,10 +253,64 @@ Commands:
   relabel-folder <folderId>
   process-video <videoId>
   export-lean
+  audit-media-links [--all]
   sync-metadata
   search <query>
   backends
 `);
+}
+
+async function auditMediaLinks(args) {
+  const { options } = parseArgs(args);
+  const state = await store.read();
+  const folders = new Map(state.folders.map((folder) => [folder.id, folder]));
+  const videos = options.all
+    ? state.videos
+    : state.videos.filter((video) => ["indexed", "needs_review", "failed"].includes(video.processing?.status));
+  const rows = await Promise.all(videos.map(async (video) => {
+    const local = await localMediaStatus(video.localVideoPath);
+    const fallback = Boolean(video.downloadUrl);
+    const sourceOnly = !fallback && Boolean(video.sharepointUrl);
+    const ok = local.readable || fallback || sourceOnly;
+    return {
+      id: video.id,
+      filename: video.filename,
+      folder: folders.get(video.folderId)?.name || "",
+      processingStatus: video.processing?.status || "pending",
+      ok,
+      localStatus: local.status,
+      hasDownloadUrl: fallback,
+      hasSharepointUrl: Boolean(video.sharepointUrl),
+      playbackPath: `/media/${video.id}`
+    };
+  }));
+  const broken = rows.filter((row) => !row.ok);
+  const sourceOnly = rows.filter((row) => row.localStatus !== "readable" && !row.hasDownloadUrl && row.hasSharepointUrl);
+  printJson({
+    scope: options.all ? "all" : "processed",
+    checked: rows.length,
+    ok: rows.length - broken.length,
+    broken: broken.length,
+    readableLocal: rows.filter((row) => row.localStatus === "readable").length,
+    datalessLocal: rows.filter((row) => row.localStatus === "dataless").length,
+    missingLocalWithFallback: rows.filter((row) => row.localStatus !== "readable" && row.hasDownloadUrl).length,
+    sourceOnlyFallback: sourceOnly.length,
+    brokenRows: broken.slice(0, 50),
+    sourceOnlyRows: sourceOnly.slice(0, 20)
+  });
+}
+
+async function localMediaStatus(localPath) {
+  if (!localPath) return { status: "none", readable: false };
+  try {
+    const stat = await fs.stat(localPath);
+    if (!stat.isFile()) return { status: "not_file", readable: false };
+    if (stat.size <= 0) return { status: "empty", readable: false };
+    if (Number(stat.blocks) === 0) return { status: "dataless", readable: false };
+    return { status: "readable", readable: true };
+  } catch {
+    return { status: "missing", readable: false };
+  }
 }
 
 function printJson(value) {
@@ -274,6 +329,8 @@ function parseArgs(args) {
       options.parallel = Number(arg.slice("--parallel=".length));
     } else if (arg === "--force-transcribe") {
       options.forceTranscribe = true;
+    } else if (arg === "--all") {
+      options.all = true;
     } else if (arg === "--no-download" || arg === "--local-only") {
       options.noDownload = true;
     } else if (arg === "--reprocess") {

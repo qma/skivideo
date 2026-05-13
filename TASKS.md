@@ -91,6 +91,10 @@
 - Reprocess workflow retranscribes from existing local audio/video and relabels; videos without local media are skipped without triggering SharePoint downloads.
 - Browser validation confirmed the `Re-Process` action is visible. Backend validation passed with a sample no-download `reprocess_folder` job: 2 indexed, 0 review, 0 failed.
 - GS Dec 30, 2025 processing completed: 56 videos, 0 indexed, 56 review, 0 failed.
+- Fixed broken `/media/:videoId` playback links caused by macOS dataless local media placeholders. The media route now treats dataless local files as unavailable and falls back to the SharePoint proxy/download URL.
+- Local media stats now count only readable local files, and event preview titles distinguish playable local media from source fallback.
+- Added `audit-media-links` CLI command. Current audit: 759 checked, 759 OK, 0 broken; 478 readable local, 254 dataless local with fallback, 279 missing local with fallback, 2 sample source-only fallbacks.
+- Verified the reported `P1000316.MP4` / `GS Race Jan 10. Northstar Day 2` app link now responds through `/media/video_2c543fe6e63efbef` with `content-type: video/mp4`.
 
 ## In Progress
 

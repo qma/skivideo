@@ -61,6 +61,7 @@ npm run cli -- process-folder <folderId> --parallel 4 --reprocess
 npm run cli -- relabel-folder <folderId>
 npm run cli -- process-video <videoId>
 npm run cli -- export-lean
+npm run cli -- audit-media-links
 npm run cli -- sync-metadata
 npm run cli -- search "Jane"
 ```

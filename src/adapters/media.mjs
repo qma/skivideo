@@ -6,12 +6,10 @@ import { establishSharePointSession } from "./sharepointRest.mjs";
 
 export async function downloadToCache(url, targetPath, options = {}) {
   if (!url) throw new Error("Download URL is empty.");
-  try {
-    await fs.access(targetPath);
+  if (await usableCachedFile(targetPath)) {
     return { path: targetPath, skipped: true };
-  } catch {
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
   }
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
   const headers = {};
   if (options.cookie) headers.cookie = options.cookie;
   const response = await fetch(url, { headers });
@@ -114,5 +112,14 @@ async function imageioFfmpegPath(config) {
     return (await run(python, ["-c", "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"])).trim();
   } catch {
     return "";
+  }
+}
+
+async function usableCachedFile(filePath) {
+  try {
+    const stat = await fs.stat(filePath);
+    return stat.isFile() && stat.size > 0 && Number(stat.blocks) !== 0;
+  } catch {
+    return false;
   }
 }
