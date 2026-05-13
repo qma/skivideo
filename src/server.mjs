@@ -1,12 +1,13 @@
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import express from "express";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
-import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
+import { buildRestFolderManifest, establishSharePointSession, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
 import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
@@ -16,6 +17,7 @@ import { normalizeText } from "./lib/text.mjs";
 const config = loadConfig();
 const store = new JsonStore(config);
 await store.ensure();
+let sharePointSessionPromise = null;
 
 const app = express();
 
@@ -103,8 +105,22 @@ app.post("/api/prepare-folder", asyncRoute((req) => prepareEventFolder(config, s
   serverRelativeUrl: req.body.serverRelativeUrl
 })));
 app.post("/api/process-folder", asyncRoute((req) => processFolder(config, store, req.body.folderId, {
-  parallel: req.body.parallel || 1
+  parallel: req.body.parallel || 4
 })));
+app.post("/api/process-folder-async", asyncRoute(async (req) => {
+  const folderId = req.body.folderId;
+  if (!folderId) throw new Error("folderId is required.");
+  const parallel = normalizeParallel(req.body.parallel, 4);
+  processFolder(config, store, folderId, { parallel }).catch((error) => {
+    console.error(`Background processing failed for ${folderId}:`, error);
+  });
+  return {
+    ok: true,
+    folderId,
+    parallel,
+    message: `Processing started in the background with ${parallel} workers. Watch the Jobs panel for live progress.`
+  };
+}));
 app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId)));
 app.post("/api/review-video", asyncRoute((req) => reviewVideo(req.body)));
 app.post("/api/export-lean", asyncRoute(async () => {
@@ -134,6 +150,12 @@ function asyncRoute(fn) {
       next(error);
     }
   };
+}
+
+function normalizeParallel(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(16, Math.floor(parsed)));
 }
 
 async function reviewVideo(body) {
@@ -284,6 +306,7 @@ async function serveMedia(req, res, videoId) {
   const video = state.videos.find((item) => item.id === videoId);
   if (!video) return res.status(404).json({ error: "Video not found" });
   if (!video.localVideoPath) {
+    if (video.downloadUrl) return proxySharePointMedia(req, res, video);
     return res.redirect(302, video.sharepointUrl);
   }
   const stat = await fs.stat(video.localVideoPath);
@@ -306,6 +329,30 @@ async function serveMedia(req, res, videoId) {
     "content-type": video.mimeType || "video/mp4"
   });
   return pipeMediaStream(fsSync.createReadStream(video.localVideoPath, { start, end }), res);
+}
+
+async function proxySharePointMedia(req, res, video) {
+  const session = await sharedSharePointSession();
+  const headers = {
+    cookie: session.cookies
+  };
+  if (req.headers.range) headers.range = req.headers.range;
+  const response = await fetch(video.downloadUrl, { headers });
+  if (!response.ok) {
+    throw new Error(`SharePoint media proxy failed ${response.status}: ${await response.text()}`);
+  }
+  const passthroughHeaders = {};
+  for (const key of ["content-length", "content-range", "content-type", "accept-ranges"]) {
+    const value = response.headers.get(key);
+    if (value) passthroughHeaders[key] = value;
+  }
+  res.writeHead(response.status, passthroughHeaders);
+  return pipeMediaStream(Readable.fromWeb(response.body), res);
+}
+
+async function sharedSharePointSession() {
+  if (!sharePointSessionPromise) sharePointSessionPromise = establishSharePointSession(config.sharepointRootUrl);
+  return sharePointSessionPromise;
 }
 
 function pipeMediaStream(stream, res) {

@@ -6,7 +6,15 @@ const state = {
   selectedFolderId: "",
   eventQuery: "",
   eventStatus: "",
-  eventConfidence: ""
+  eventConfidence: "",
+  jobPollTimer: null
+};
+
+const actionTips = {
+  view: "Open this event's video table. Does not download media.",
+  prepare: "Low-data setup: correlate Live-Timing, parse racer rosters/assets, and relabel from existing metadata. Does not download videos.",
+  process: "Download/mirror videos, extract audio, transcribe, label, and update the index. Starts with parallel 4 by default.",
+  live: "Refresh only Live-Timing race correlation, racer roster, and linked assets. Does not download videos."
 };
 
 const el = (id) => document.getElementById(id);
@@ -78,6 +86,7 @@ async function refresh() {
   renderEventView();
   renderJobsAndEvents();
   await renderSearch();
+  scheduleJobPolling();
 }
 
 function renderStatus() {
@@ -125,10 +134,10 @@ function renderFolders() {
           <span>${stats.needsReview || 0} review · ${stats.failed || 0} failed</span>
         </div>
         <div class="eventActions">
-          <button data-view-event="${escapeHtml(folder.id)}">View</button>
-          <button class="subtleButton" data-prepare="${escapeHtml(folder.id)}">Prepare</button>
-          <button class="subtleButton" data-process="${escapeHtml(folder.id)}">Process</button>
-          <button class="subtleButton" data-correlate="${escapeHtml(folder.id)}">Live</button>
+          <button data-view-event="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.view)}" aria-label="${escapeAttr(actionTips.view)}">View</button>
+          <button class="subtleButton" data-prepare="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</button>
+          <button class="subtleButton" data-process="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</button>
+          <button class="subtleButton" data-correlate="${escapeHtml(folder.id)}" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</button>
         </div>
       </article>
     `;
@@ -136,7 +145,7 @@ function renderFolders() {
   ` : `<p class="muted">No folders indexed yet.</p>`;
 
   for (const button of document.querySelectorAll("[data-process]")) {
-    button.addEventListener("click", () => action("/api/process-folder", { folderId: button.dataset.process }));
+    button.addEventListener("click", () => startProcessing(button.dataset.process));
   }
   for (const button of document.querySelectorAll("[data-prepare]")) {
     button.addEventListener("click", () => action("/api/prepare-folder", { folderId: button.dataset.prepare }));
@@ -224,7 +233,10 @@ function renderEventView() {
             <button class="subtleButton" data-clear-labels="${escapeAttr(video.id)}">Clear</button>
           </div>
         </td>
-        <td>${video.sharepointUrl ? `<a href="${escapeAttr(video.sharepointUrl)}" target="_blank" rel="noreferrer">SharePoint</a>` : ""}</td>
+        <td>
+          <a href="${escapeAttr(playbackHref(video))}" target="_blank" rel="noreferrer">Open Video</a>
+          ${video.sharepointUrl ? `<a class="sourceLink" href="${escapeAttr(video.sharepointUrl)}" target="_blank" rel="noreferrer">Source</a>` : ""}
+        </td>
       </tr>
     `;
   }).join("") || `<tr><td colspan="7" class="muted">No videos in this event.</td></tr>`;
@@ -318,7 +330,7 @@ async function renderSearch() {
             <strong>${escapeHtml(video.filename)}</strong>
             <p>${escapeHtml(video.folder?.name || "")}</p>
           </div>
-          ${video.sharepointUrl ? `<a href="${escapeAttr(video.sharepointUrl)}" target="_blank" rel="noreferrer">Open Video</a>` : ""}
+          <a href="${escapeAttr(playbackHref(video))}" target="_blank" rel="noreferrer">Open Video</a>
         </div>
         <div class="pillRow">
           <span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span>
@@ -339,9 +351,29 @@ async function action(path, body = {}, options = {}) {
     });
     if (!options.silent) showLog(result);
     await refresh();
+    return result;
   } catch (error) {
     showLog({ error: error.message });
+    return null;
   }
+}
+
+async function startProcessing(folderId) {
+  const result = await action("/api/process-folder-async", { folderId, parallel: 4 });
+  if (result?.ok) scheduleJobPolling(true);
+}
+
+function scheduleJobPolling(force = false) {
+  if (state.jobPollTimer) clearTimeout(state.jobPollTimer);
+  const hasRunningJob = state.summary?.jobs?.some((job) => job.status === "running");
+  if (!force && !hasRunningJob) return;
+  state.jobPollTimer = setTimeout(async () => {
+    try {
+      await refresh();
+    } catch (error) {
+      showLog({ error: error.message });
+    }
+  }, 2500);
 }
 
 async function api(path, options) {
@@ -396,4 +428,8 @@ function normalizeClientText(value) {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function playbackHref(video) {
+  return `/media/${encodeURIComponent(video.id)}`;
 }

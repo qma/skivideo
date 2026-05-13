@@ -29,11 +29,13 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 - Local Apple Silicon optimized MLX Whisper transcription hook.
 - Local whisper.cpp transcription fallback using `/opt/homebrew/bin/whisper-cli` and `data/models/ggml-base.en.bin` when MLX/Metal is unavailable to the runner.
 - OpenAI transcription and labeler hooks as optional fallbacks when `OPENAI_API_KEY` is available.
-- Event detail view with status/confidence filters, event-local search, Live-Timing assets, SharePoint links, and embedded local video players.
+- Event detail view with status/confidence filters, event-local search, Live-Timing assets, app playback links, source SharePoint links, and embedded local video players.
+- Event list actions include mouse-over tooltips. `View` opens the event table without network processing, `Prepare` runs low-data event prep, `Live` refreshes only Live-Timing correlation, and `Process` starts download/transcription/indexing with four workers by default.
 - Event review controls for manual athlete correction and label clearing without media downloads.
 - Lazy web loading: startup reads `/api/summary`, selected events read `/api/event?folderId=...`, and global search reads `/api/search` instead of loading the full store into the browser.
+- Background processing from the web UI returns immediately and the Jobs panel refreshes while processing is running, so progress is visible without waiting on a single long HTTP response.
 - Optional Firestore metadata sync through Firebase service-account credentials.
-- SharePoint playback links in search results.
+- App playback links in search results. `/media/:videoId` serves cached local media or proxies SharePoint through the original public shared-link session when the video is not mirrored locally.
 
 ## Useful Commands
 
@@ -94,7 +96,7 @@ The sync writes prefixed Firestore collections for folders, videos, events, jobs
 
 The backend is an Express app. That works directly on server runtimes such as Cloud Run, Render, Fly, Railway, or any container host. For Vercel, deploy the Express app through a serverless function or move the route handlers into Vercel API routes. For Firebase, use Firebase Hosting rewrites to Cloud Functions or Cloud Run; Firebase Hosting alone is static and cannot run the API.
 
-The publishable version should avoid hosting videos. Use Firestore or `data/exports/lean-index.json` for metadata/search, and keep playback links pointed at SharePoint.
+The publishable version should avoid storing videos. Use Firestore or `data/exports/lean-index.json` for metadata/search. Playback can either link to SharePoint source URLs or use an authenticated/server-side proxy endpoint when public SharePoint folder links do not produce stable anonymous per-file URLs.
 
 ## Credential Notes
 

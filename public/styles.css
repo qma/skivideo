@@ -426,6 +426,13 @@ a {
   color: var(--accent-dark);
 }
 
+.sourceLink {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 pre {
   white-space: pre-wrap;
   max-width: min(900px, 90vw);

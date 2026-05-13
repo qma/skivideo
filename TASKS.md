@@ -3,7 +3,7 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Improve event browsing: chronological compact listing with color-coded processing status.
+- Clarify event action buttons, default web processing to four workers, and expose live job progress while processing runs.
 
 ## Completed
 
@@ -46,6 +46,13 @@
 - Browser validation passed for Jan 10 event view and event-local `Hannah Davidson` search after full processing.
 - Event list changed to compact chronological layout with color-coded status badges and per-event local media/transcript/index counts.
 - Browser validation passed for chronological compact event list; Dec 30 through Jan 11 rows render in date order, and Jan 9/Jan 10 show `Processed + review`.
+- Video playback links now point at app `/media/:videoId` routes instead of raw SharePoint tenant file URLs, avoiding login prompts caused by direct site-relative SharePoint links.
+- `/media/:videoId` serves cached local media or proxies SharePoint downloads through the original public shared-link session when local media is unavailable.
+- Browser validation passed for global search playback links: `Chloe Fang` results now use `/media/<videoId>` app playback URLs instead of raw SharePoint URLs.
+- Event action buttons now have mouse-over tooltips explaining `View`, `Prepare`, `Process`, and `Live`.
+- Web UI `Process` now starts a background processing job with `parallel: 4` by default.
+- The Jobs panel now refreshes while jobs are running, giving live progress from the existing job records instead of blocking on one long request.
+- Browser validation passed for event action tooltips on the compact chronological event list.
 
 ## In Progress
 
