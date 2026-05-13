@@ -286,7 +286,13 @@ async function eventDetail(folderId) {
 async function serveStatic(res, pathname) {
   const safePath = pathname === "/" ? "/index.html" : pathname;
   const filePath = path.join(config.rootDir, "public", safePath.replace(/^\/+/, ""));
-  const content = await fs.readFile(filePath);
+  let content;
+  try {
+    content = await fs.readFile(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return sendJson(res, { error: "Not found" }, 404);
+    throw error;
+  }
   const type = filePath.endsWith(".css") ? "text/css"
     : filePath.endsWith(".js") ? "text/javascript"
     : "text/html";
