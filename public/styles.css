@@ -142,6 +142,126 @@ select {
   gap: 10px;
 }
 
+.eventList {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.eventListHeader,
+.eventRow {
+  display: grid;
+  grid-template-columns: 112px minmax(220px, 1fr) 146px 92px 132px 250px;
+  gap: 8px;
+  align-items: center;
+}
+
+.eventListHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 28px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.eventRow {
+  min-height: 48px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcf9;
+}
+
+.eventRow strong {
+  font-size: 13px;
+}
+
+.eventDate,
+.eventName,
+.eventCounts {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.eventDate span,
+.eventName span,
+.eventCounts span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eventName strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eventActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.eventActions button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  width: max-content;
+  max-width: 140px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.statusProcessed {
+  background: #eaf5ef;
+  color: #14633a;
+  border-color: #b8dac7;
+}
+
+.statusReview {
+  background: #fff7ea;
+  color: var(--warn);
+  border-color: #edcf9c;
+}
+
+.statusPrepared {
+  background: #eef5f4;
+  color: var(--accent-dark);
+  border-color: #bad8d6;
+}
+
+.statusPending,
+.statusDiscovered {
+  background: #f3f3ee;
+  color: #687067;
+}
+
+.statusFailed {
+  background: #fff0f0;
+  color: var(--bad);
+  border-color: #e4b8b8;
+}
+
 .item,
 .result {
   border: 1px solid var(--line);
@@ -327,6 +447,24 @@ pre {
 
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .eventListHeader {
+    display: none;
+  }
+
+  .eventRow {
+    grid-template-columns: 92px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .eventRow > div:nth-child(n+3) {
+    grid-column: 2;
+  }
+
+  .eventActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .eventTools {

@@ -84,38 +84,56 @@ function renderStatus() {
   const folders = state.summary.counts.folders;
   const videos = state.summary.counts.videos;
   const labels = state.summary.counts.labels;
-  const mlx = state.config.transcriptionBackends?.mlxWhisper ? "MLX Whisper ready" : "MLX Whisper not installed";
-  el("statusLine").textContent = `${folders} folders, ${videos} videos, ${labels} labels. ${mlx}.`;
+  const backend = transcriptionBackendLabel(state.config.transcriptionBackends);
+  el("statusLine").textContent = `${folders} folders, ${videos} videos, ${labels} labels. ${backend}.`;
 }
 
 function renderFolders() {
-  el("folders").innerHTML = state.summary.folders.map((folder) => {
+  const folders = [...state.summary.folders].sort(compareFoldersChronologically);
+  el("folders").innerHTML = folders.length ? `
+    <div class="eventListHeader">
+      <span>Date</span>
+      <span>Event</span>
+      <span>Status</span>
+      <span>Videos</span>
+      <span>Index</span>
+      <span>Actions</span>
+    </div>
+    ${folders.map((folder) => {
     const event = folder.eventMatch;
     const stats = folder.stats || {};
+    const status = eventProcessingStatus(folder);
     return `
-      <article class="item">
-        <div class="itemHeader">
-          <div>
-            <strong>${escapeHtml(folder.name)}</strong>
-            <p>${escapeHtml(folder.path || folder.source || "")}</p>
-          </div>
-          <button data-view-event="${escapeHtml(folder.id)}">View Event</button>
-          <button data-prepare="${escapeHtml(folder.id)}">Prepare</button>
-          <button data-process="${escapeHtml(folder.id)}">Process</button>
-          <button data-correlate="${escapeHtml(folder.id)}">Live-Timing</button>
+      <article class="eventRow">
+        <div class="eventDate">
+          <strong>${escapeHtml(eventDateLabel(folder))}</strong>
+          <span>${escapeHtml(event?.discipline || "")}</span>
         </div>
-        <div class="pillRow">
-          <span class="pill">${stats.videoCount || 0} videos</span>
-          ${stats.indexed ? `<span class="pill">${stats.indexed} indexed</span>` : ""}
-          ${stats.needsReview ? `<span class="pill warn">${stats.needsReview} review</span>` : ""}
-          ${event ? `<span class="pill">Event ${Math.round((event.confidence || 0) * 100)}%</span>` : `<span class="pill warn">No event match</span>`}
-          ${folder.raceAssetCount ? `<span class="pill">${folder.raceAssetCount} race assets</span>` : ""}
-          ${folder.candidateRosterCount ? `<span class="pill">${folder.candidateRosterCount} racers</span>` : ""}
+        <div class="eventName">
+          <strong>${escapeHtml(folder.name)}</strong>
+          <span>${escapeHtml([event?.venue, folder.raceAssetCount ? `${folder.raceAssetCount} assets` : "", folder.candidateRosterCount ? `${folder.candidateRosterCount} racers` : ""].filter(Boolean).join(" · "))}</span>
         </div>
-        ${event ? `<p class="muted">${escapeHtml(event.canonicalName || "")} ${escapeHtml(event.date || "")}</p>` : ""}
+        <div>
+          <span class="statusBadge ${status.className}">${escapeHtml(status.label)}</span>
+        </div>
+        <div class="eventCounts">
+          <strong>${stats.videoCount || 0}</strong>
+          <span>${stats.localVideo || 0} local · ${stats.transcripts || 0} tx</span>
+        </div>
+        <div class="eventCounts">
+          <strong>${stats.indexed || 0}/${stats.videoCount || 0}</strong>
+          <span>${stats.needsReview || 0} review · ${stats.failed || 0} failed</span>
+        </div>
+        <div class="eventActions">
+          <button data-view-event="${escapeHtml(folder.id)}">View</button>
+          <button class="subtleButton" data-prepare="${escapeHtml(folder.id)}">Prepare</button>
+          <button class="subtleButton" data-process="${escapeHtml(folder.id)}">Process</button>
+          <button class="subtleButton" data-correlate="${escapeHtml(folder.id)}">Live</button>
+        </div>
       </article>
     `;
-  }).join("") || `<p class="muted">No folders indexed yet.</p>`;
+  }).join("")}
+  ` : `<p class="muted">No folders indexed yet.</p>`;
 
   for (const button of document.querySelectorAll("[data-process]")) {
     button.addEventListener("click", () => action("/api/process-folder", { folderId: button.dataset.process }));
@@ -210,6 +228,42 @@ function renderEventView() {
       </tr>
     `;
   }).join("") || `<tr><td colspan="7" class="muted">No videos in this event.</td></tr>`;
+}
+
+function compareFoldersChronologically(a, b) {
+  return folderSortKey(a).localeCompare(folderSortKey(b)) || String(a.name).localeCompare(String(b.name));
+}
+
+function folderSortKey(folder) {
+  const date = folder.eventMatch?.date || folder.timeCreated?.slice(0, 10) || "9999-99-99";
+  return `${date}:${folder.name || ""}`;
+}
+
+function eventDateLabel(folder) {
+  return folder.eventMatch?.date || folder.timeCreated?.slice(0, 10) || "No date";
+}
+
+function eventProcessingStatus(folder) {
+  const stats = folder.stats || {};
+  const total = stats.videoCount || 0;
+  if (!total) return { label: "Discovered", className: "statusDiscovered" };
+  if (stats.failed) return { label: "Has failures", className: "statusFailed" };
+  if ((stats.localVideo || 0) >= total && (stats.indexed || 0) + (stats.needsReview || 0) >= total) {
+    return stats.needsReview
+      ? { label: "Processed + review", className: "statusReview" }
+      : { label: "Processed", className: "statusProcessed" };
+  }
+  if ((stats.indexed || 0) + (stats.needsReview || 0) >= total) {
+    return { label: "Prepared", className: "statusPrepared" };
+  }
+  return { label: "Pending", className: "statusPending" };
+}
+
+function transcriptionBackendLabel(backends = {}) {
+  if (backends.mlxWhisper) return "MLX Whisper ready";
+  if (backends.whisperCpp) return "whisper.cpp ready";
+  if (backends.openai) return "OpenAI transcription ready";
+  return "No transcription backend";
 }
 
 function eventVideoMatchesFilters(video) {

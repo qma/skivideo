@@ -205,6 +205,8 @@ async function summary() {
     indexed: 0,
     needsReview: 0,
     failed: 0,
+    localVideo: 0,
+    transcripts: 0,
     labels: 0
   }]));
   let labels = 0;
@@ -215,6 +217,8 @@ async function summary() {
     if (!stats) continue;
     stats.videoCount += 1;
     stats.labels += labelCount;
+    if (video.localVideoPath) stats.localVideo += 1;
+    if (video.transcript?.text) stats.transcripts += 1;
     const status = video.processing?.status || "pending";
     if (status === "indexed") stats.indexed += 1;
     else if (status === "needs_review") stats.needsReview += 1;
@@ -245,6 +249,8 @@ async function summary() {
         indexed: 0,
         needsReview: 0,
         failed: 0,
+        localVideo: 0,
+        transcripts: 0,
         labels: 0
       }
     })),

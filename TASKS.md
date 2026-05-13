@@ -3,7 +3,7 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Replace the raw Node `http` server with a standard lightweight framework server suitable for local use and later deployment.
+- Improve event browsing: chronological compact listing with color-coded processing status.
 
 ## Completed
 
@@ -44,6 +44,8 @@
 - Web app server restarted and verified in the in-app browser at `http://127.0.0.1:4173/`, bound internally to `0.0.0.0:4173`.
 - Current index has no Jan 8 event folder. Northstar race folders in the index are Jan 9, Jan 10, and Jan 11; Jan 9 and Jan 10 have processed video rows.
 - Browser validation passed for Jan 10 event view and event-local `Hannah Davidson` search after full processing.
+- Event list changed to compact chronological layout with color-coded status badges and per-event local media/transcript/index counts.
+- Browser validation passed for chronological compact event list; Dec 30 through Jan 11 rows render in date order, and Jan 9/Jan 10 show `Processed + review`.
 
 ## In Progress
 
