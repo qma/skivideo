@@ -57,6 +57,23 @@ if (ambiguousLabels.length !== 2 || ambiguousLabels.some((label) => label.confid
   throw new Error("Ambiguous one-word roster matches should require review.");
 }
 
+const filenameRosterLabels = deterministicLabels(
+  {
+    filename: "IzzyBronitsky_run2.MOV",
+    transcript: { text: "" }
+  },
+  {
+    candidateRoster: [
+      { name: "Isabelle Bronitsky", bib: "44", team: "TPT", club: "Team Palis" },
+      { name: "Isabelle Qin", bib: "69", team: "TPT", club: "Team Palis" }
+    ]
+  }
+);
+
+if (filenameRosterLabels[0]?.name !== "Isabelle Bronitsky" || filenameRosterLabels[0]?.confidence < 0.65) {
+  throw new Error("Filename roster matching should use local filename hints without media downloads.");
+}
+
 const racePayload = parseLiveTimingRacePayload(
   "1=0=1=N=30|hN=U=CA Challenge Series |hT=Giant Slalom=Women|hC=USA=CA|hR=Northstar Resort|hST=1/9/2026 9:00 AM|hID=297652|hE|b=49|m=Yuan, Vivian|t=TPT|c=Team Palis|s=U14|un=F7062977|endC|~",
   "https://www.live-timing.com/includes/aj_race.php?r=297652"

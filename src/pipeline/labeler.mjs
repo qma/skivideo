@@ -1,4 +1,4 @@
-import { includesName, normalizeText } from "../lib/text.mjs";
+import { includesName, normalizeText, tokenizeName } from "../lib/text.mjs";
 import { bestFuzzyRosterMatch } from "../lib/fuzzyNames.mjs";
 
 export async function labelVideoAthletes(config, video, folder) {
@@ -17,10 +17,12 @@ export function deterministicLabels(video, folder) {
   const labels = [];
   const fuzzyMatches = new Map();
   const fuzzyObservedCounts = new Map();
+  const filenameMatches = new Map();
 
   for (const racer of roster) {
     const fuzzy = bestFuzzyRosterMatch(transcriptText, racer);
     fuzzyMatches.set(racer, fuzzy);
+    filenameMatches.set(racer, bestFilenameRosterMatch(filename, racer, roster));
     if (fuzzy && fuzzy.score >= 0.76 && isSingleToken(fuzzy.observed)) {
       const key = normalizeText(fuzzy.observed);
       fuzzyObservedCounts.set(key, (fuzzyObservedCounts.get(key) || 0) + 1);
@@ -30,18 +32,22 @@ export function deterministicLabels(video, folder) {
   for (const racer of roster) {
     const inTranscript = includesName(transcriptText, racer.name);
     const inFilename = includesName(filename.replace(/[_-]/g, " "), racer.name);
+    const filenameRoster = filenameMatches.get(racer);
+    const filenameRosterMatch = filenameRoster && filenameRoster.score >= 0.8;
     const bibMatch = racer.bib && filenameBibMatches(filename, racer.bib);
     const fuzzy = fuzzyMatches.get(racer);
     const fuzzyMatch = fuzzy && fuzzy.score >= 0.76;
     const ambiguousFuzzy = fuzzyMatch && isSingleToken(fuzzy.observed) && (fuzzyObservedCounts.get(normalizeText(fuzzy.observed)) || 0) > 1;
-    if (!(inTranscript || inFilename || bibMatch || fuzzyMatch)) continue;
-    const confidence = inTranscript ? 0.86 : inFilename ? 0.7 : bibMatch ? 0.58 : ambiguousFuzzy ? 0.52 : Math.min(0.68, fuzzy.score * 0.78);
+    if (!(inTranscript || inFilename || filenameRosterMatch || bibMatch || fuzzyMatch)) continue;
+    const confidence = inTranscript ? 0.86 : inFilename ? 0.7 : filenameRosterMatch ? filenameRoster.confidence : bibMatch ? 0.58 : ambiguousFuzzy ? 0.52 : Math.min(0.68, fuzzy.score * 0.78);
     labels.push({
       name: racer.name,
       confidence,
-      source: inTranscript ? "audio_transcript" : inFilename ? "filename_context" : bibMatch ? "bib_filename_context" : ambiguousFuzzy ? "fuzzy_audio_roster_ambiguous" : "fuzzy_audio_roster_match",
+      source: inTranscript ? "audio_transcript" : inFilename ? "filename_context" : filenameRosterMatch ? "filename_roster_match" : bibMatch ? "bib_filename_context" : ambiguousFuzzy ? "fuzzy_audio_roster_ambiguous" : "fuzzy_audio_roster_match",
       evidence: inTranscript
         ? evidenceSnippet(transcriptText, racer.name)
+        : filenameRosterMatch
+          ? `Filename token "${filenameRoster.observed}" matched roster name ${racer.name}`
         : fuzzyMatch
           ? ambiguousFuzzy
             ? `Transcript heard "${fuzzy.observed}", which matches multiple roster names including ${racer.name}`
@@ -190,6 +196,57 @@ function filenameBibMatches(filename, bib) {
     ...base.matchAll(/(?:^|[^A-Za-z0-9])0*(\d{1,3})(?=$|[^A-Za-z0-9])/g)
   ].map((match) => match[1].replace(/^0+/, ""));
   return candidates.includes(target);
+}
+
+function bestFilenameRosterMatch(filename, racer, roster) {
+  const filenameTokens = filenameNameTokens(filename);
+  if (!filenameTokens.length) return null;
+  const nameTokens = tokenizeName(racer.name);
+  const first = nameTokens[0] || "";
+  const last = nameTokens.at(-1) || "";
+  const aliases = firstNameAliases(first);
+  const firstOrAlias = [first, ...aliases].filter(Boolean);
+  const hasFirst = firstOrAlias.some((token) => filenameTokens.includes(token));
+  const hasLast = last && filenameTokens.includes(last);
+  if (hasFirst && hasLast) {
+    return { observed: `${first || aliases[0]} ${last}`.trim(), score: 0.94, confidence: 0.76 };
+  }
+  if (hasLast && rosterTokenCount(roster, last, "last") === 1) {
+    return { observed: last, score: 0.88, confidence: 0.72 };
+  }
+  const observedFirst = firstOrAlias.find((token) => filenameTokens.includes(token));
+  if (observedFirst && rosterTokenCount(roster, observedFirst, "first") === 1) {
+    return { observed: observedFirst, score: 0.84, confidence: 0.7 };
+  }
+  return null;
+}
+
+function filenameNameTokens(filename) {
+  const base = String(filename || "")
+    .replace(/\.[^.]+$/, "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2");
+  const stop = new Set(["run", "one", "two", "r1", "r2", "mp4", "mov", "m4v"]);
+  return normalizeText(base)
+    .split(" ")
+    .filter((token) => /[a-z]/.test(token) && token.length > 1 && !stop.has(token));
+}
+
+function rosterTokenCount(roster, token, position) {
+  const needle = normalizeText(token);
+  return roster.filter((racer) => {
+    const tokens = tokenizeName(racer.name);
+    if (position === "first") return tokens[0] === needle || firstNameAliases(tokens[0]).includes(needle);
+    if (position === "last") return tokens.at(-1) === needle;
+    return tokens.includes(needle);
+  }).length;
+}
+
+function firstNameAliases(first) {
+  const aliases = {
+    isabelle: ["izzy"],
+    izzy: ["isabelle"]
+  };
+  return aliases[normalizeText(first)] || [];
 }
 
 function isSingleToken(value) {

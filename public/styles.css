@@ -105,6 +105,16 @@ button:hover {
   background: var(--accent-dark);
 }
 
+.subtleButton {
+  background: #fff;
+  color: var(--accent-dark);
+  border-color: var(--line);
+}
+
+.subtleButton:hover {
+  background: #eef5f4;
+}
+
 input,
 select {
   background: #fff;
@@ -274,6 +284,22 @@ select {
   max-width: 360px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.reviewTools {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
+  gap: 6px;
+  min-width: 300px;
+}
+
+.reviewTools input {
+  min-height: 32px;
+}
+
+.reviewTools button {
+  min-height: 32px;
+  padding: 0 9px;
 }
 
 a {

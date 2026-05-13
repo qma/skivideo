@@ -28,6 +28,8 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 - Local Apple Silicon optimized MLX Whisper transcription hook.
 - OpenAI transcription and labeler hooks as optional fallbacks when `OPENAI_API_KEY` is available.
 - Event detail view with status/confidence filters, event-local search, Live-Timing assets, SharePoint links, and embedded local video players.
+- Event review controls for manual athlete correction and label clearing without media downloads.
+- Lazy web loading: startup reads `/api/summary`, selected events read `/api/event?folderId=...`, and global search reads `/api/search` instead of loading the full store into the browser.
 - Optional Firestore metadata sync through Firebase service-account credentials.
 - SharePoint playback links in search results.
 
@@ -43,6 +45,8 @@ npm run cli -- ingest-oldest-sharepoint-folder
 npm run cli -- fetch-live-timing-day <YYYY-MM-DD>
 npm run cli -- fetch-live-timing-race <raceId>
 npm run cli -- correlate-folder-live-timing <folderId>
+npm run cli -- prepare-folder <folderId>
+npm run cli -- prepare-folder-rest <serverRelativeUrl>
 npm run cli -- process-folder <folderId> --parallel 4
 npm run cli -- relabel-folder <folderId>
 npm run cli -- process-video <videoId>
@@ -53,6 +57,8 @@ npm run cli -- search "Jane"
 
 For the provided Team Palisades shared link, `list-sharepoint-rest` works without Graph credentials by establishing the anonymous shared-link SharePoint session and calling SharePoint REST endpoints. The current real validation folder is `GS Race Jan 9. Northstar. Day 1`, correlated to Live-Timing races `297661` (men) and `297652` (women).
 
+Use `prepare-folder` in low-data mode. It is the repeatable, codified event-prep workflow: ingest/refresh the manifest when needed, match Live-Timing daily races by folder date/venue/discipline, parse racer rosters, attach race assets, and relabel videos from metadata/filenames without downloading media. Use `process-folder` only when you are ready to mirror/transcribe video files.
+
 ## Data Layout
 
 - `data/index/store.json`: working local index.
@@ -61,6 +67,8 @@ For the provided Team Palisades shared link, `list-sharepoint-rest` works withou
 - `data/audio/`: extracted or downloaded audio, excluded from git.
 - `data/transcripts/`: generated transcripts, excluded from git.
 - `data/exports/lean-index.json`: publishable metadata export.
+
+The web app no longer loads `data/index/store.json` wholesale at startup. Folder cards are backed by a compact summary endpoint, while event video rows are fetched only when an event is opened.
 
 ## Metadata Backend
 

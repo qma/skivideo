@@ -7,6 +7,7 @@ import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs"
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingRaceData, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, processVideo, relabelFolder } from "./pipeline/processFolder.mjs";
+import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -32,6 +33,8 @@ async function main(cmd, args) {
   if (cmd === "manifest-sharepoint") return manifestSharePoint(args[0]);
   if (cmd === "manifest-sharepoint-rest") return manifestSharePointRest(args.join(" "));
   if (cmd === "ingest-oldest-sharepoint-folder") return ingestOldestSharePointFolder();
+  if (cmd === "prepare-folder") return prepareFolderCommand(args);
+  if (cmd === "prepare-folder-rest") return prepareFolderRestCommand(args.join(" "));
   if (cmd === "process-folder") return processFolderCommand(args);
   if (cmd === "relabel-folder") return relabelFolderCommand(args);
   if (cmd === "process-video") return processSingleVideo(args[0]);
@@ -60,6 +63,17 @@ async function processFolderCommand(args) {
   return printJson(await processFolder(config, store, folderId, {
     parallel: options.parallel || 1
   }));
+}
+
+async function prepareFolderCommand(args) {
+  const folderId = args[0];
+  if (!folderId) throw new Error("Folder id is required.");
+  return printJson(await prepareEventFolder(config, store, { folderId }));
+}
+
+async function prepareFolderRestCommand(serverRelativeUrl) {
+  if (!serverRelativeUrl) throw new Error("Folder server-relative URL is required.");
+  return printJson(await prepareEventFolder(config, store, { serverRelativeUrl }));
 }
 
 async function relabelFolderCommand(args) {
@@ -225,6 +239,8 @@ Commands:
   manifest-sharepoint <folderUrl>
   manifest-sharepoint-rest <serverRelativeUrl>
   ingest-oldest-sharepoint-folder
+  prepare-folder <folderId>
+  prepare-folder-rest <serverRelativeUrl>
   process-folder <folderId> [--parallel n]
   relabel-folder <folderId>
   process-video <videoId>

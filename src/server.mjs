@@ -9,6 +9,7 @@ import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs"
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
+import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -39,6 +40,8 @@ async function routeApi(req, url) {
     return { ...publicConfig(config), transcriptionBackends: await detectTranscriptionBackends(config) };
   }
   if (req.method === "GET" && url.pathname === "/api/store") return store.read();
+  if (req.method === "GET" && url.pathname === "/api/summary") return summary();
+  if (req.method === "GET" && url.pathname === "/api/event") return eventDetail(url.searchParams.get("folderId") || "");
   if (req.method === "GET" && url.pathname === "/api/search") return search(url.searchParams.get("q") || "");
   if (req.method === "POST" && url.pathname === "/api/ingest-sample") {
     const manifest = JSON.parse(await fs.readFile(path.join(config.rootDir, "samples/sample-manifest.json"), "utf8"));
@@ -114,6 +117,13 @@ async function routeApi(req, url) {
     await store.upsertVideos(manifest.videos || []);
     return { ok: true, selectedFolder: manifest.folders[0], videos: manifest.videos.length };
   }
+  if (req.method === "POST" && url.pathname === "/api/prepare-folder") {
+    const body = await readBody(req);
+    return prepareEventFolder(config, store, {
+      folderId: body.folderId,
+      serverRelativeUrl: body.serverRelativeUrl
+    });
+  }
   if (req.method === "POST" && url.pathname === "/api/process-folder") {
     const body = await readBody(req);
     return processFolder(config, store, body.folderId, { parallel: body.parallel || 1 });
@@ -121,6 +131,10 @@ async function routeApi(req, url) {
   if (req.method === "POST" && url.pathname === "/api/relabel-folder") {
     const body = await readBody(req);
     return relabelFolder(config, store, body.folderId);
+  }
+  if (req.method === "POST" && url.pathname === "/api/review-video") {
+    const body = await readBody(req);
+    return reviewVideo(body);
   }
   if (req.method === "POST" && url.pathname === "/api/export-lean") {
     const result = await store.exportLean();
@@ -130,6 +144,52 @@ async function routeApi(req, url) {
     return syncMetadataBackend(config, await store.read());
   }
   return { error: "Not found" };
+}
+
+async function reviewVideo(body) {
+  if (!body.videoId) throw new Error("videoId is required.");
+  if (!["manual-label", "clear-labels"].includes(body.action)) throw new Error("Unsupported review action.");
+  const labelName = String(body.labelName || "").trim();
+  if (body.action === "manual-label" && !labelName) throw new Error("labelName is required.");
+  let updated = null;
+  await store.updateVideoWith((state) => {
+    state.videos = state.videos.map((video) => {
+      if (video.id !== body.videoId) return video;
+      if (body.action === "clear-labels") {
+        updated = {
+          ...video,
+          athleteLabels: [],
+          processing: {
+            ...(video.processing || {}),
+            status: "needs_review",
+            reviewedAt: new Date().toISOString()
+          }
+        };
+        return updated;
+      }
+      const manualLabel = {
+        name: labelName,
+        confidence: 0.99,
+        source: "manual_review",
+        evidence: "Manually assigned in event review UI",
+        matchedRoster: false,
+        methodVersion: "manual-v1"
+      };
+      updated = {
+        ...video,
+        athleteLabels: [manualLabel, ...(video.athleteLabels || []).filter((label) => label.source !== "manual_review")],
+        processing: {
+          ...(video.processing || {}),
+          status: "indexed",
+          reviewedAt: new Date().toISOString()
+        }
+      };
+      return updated;
+    });
+    return state;
+  });
+  if (!updated) throw new Error(`Video not found: ${body.videoId}`);
+  return { ok: true, video: updated };
 }
 
 async function search(query) {
@@ -146,6 +206,81 @@ async function search(query) {
       return { ...video, folder };
     });
   return { query, results };
+}
+
+async function summary() {
+  const state = await store.read();
+  const folderStats = new Map(state.folders.map((folder) => [folder.id, {
+    videoCount: 0,
+    indexed: 0,
+    needsReview: 0,
+    failed: 0,
+    labels: 0
+  }]));
+  let labels = 0;
+  for (const video of state.videos) {
+    const stats = folderStats.get(video.folderId);
+    const labelCount = video.athleteLabels?.length || 0;
+    labels += labelCount;
+    if (!stats) continue;
+    stats.videoCount += 1;
+    stats.labels += labelCount;
+    const status = video.processing?.status || "pending";
+    if (status === "indexed") stats.indexed += 1;
+    else if (status === "needs_review") stats.needsReview += 1;
+    else if (status === "failed") stats.failed += 1;
+  }
+  return {
+    counts: {
+      folders: state.folders.length,
+      videos: state.videos.length,
+      labels
+    },
+    folders: state.folders.map((folder) => ({
+      id: folder.id,
+      source: folder.source,
+      name: folder.name,
+      path: folder.path,
+      serverRelativeUrl: folder.serverRelativeUrl,
+      sharepointUrl: folder.sharepointUrl,
+      itemCount: folder.itemCount,
+      timeCreated: folder.timeCreated,
+      timeLastModified: folder.timeLastModified,
+      discoveredAt: folder.discoveredAt,
+      eventMatch: folder.eventMatch,
+      raceAssetCount: folder.raceAssets?.length || 0,
+      candidateRosterCount: folder.candidateRoster?.length || 0,
+      stats: folderStats.get(folder.id) || {
+        videoCount: 0,
+        indexed: 0,
+        needsReview: 0,
+        failed: 0,
+        labels: 0
+      }
+    })),
+    jobs: state.jobs.slice(0, 8),
+    events: state.events.slice(0, 12)
+  };
+}
+
+async function eventDetail(folderId) {
+  if (!folderId) throw new Error("folderId is required.");
+  const state = await store.read();
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) throw new Error(`Folder not found: ${folderId}`);
+  return {
+    folder,
+    videos: state.videos
+      .filter((video) => video.folderId === folderId)
+      .map((video) => ({
+        ...video,
+        transcript: video.transcript ? {
+          source: video.transcript.source,
+          text: String(video.transcript.text || "").slice(0, 500),
+          segments: []
+        } : video.transcript
+      }))
+  };
 }
 
 async function serveStatic(res, pathname) {

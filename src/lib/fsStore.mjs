@@ -87,6 +87,12 @@ export class JsonStore {
     return this.write(store);
   }
 
+  async updateVideoWith(fn) {
+    const store = await this.read();
+    const next = fn(store);
+    return this.write(next || store);
+  }
+
   async addJob(job) {
     const store = await this.read();
     store.jobs = [job, ...store.jobs.filter((existing) => existing.id !== job.id)].slice(0, 50);
