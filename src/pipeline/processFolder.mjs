@@ -3,6 +3,7 @@ import { ensureFolderManifest, ensureLiveTimingCorrelation } from "./eventDepend
 import { cacheTranscript, mirrorVideo, extractAudio } from "../adapters/media.mjs";
 import { transcribeAudio } from "../adapters/transcription.mjs";
 import { labelVideoAthletes } from "./labeler.mjs";
+import { buildTranscriptionPrompt, shouldUseTranscriptionPrompt } from "./transcriptionPrompt.mjs";
 
 export async function processFolder(config, store, folderId, options = {}) {
   const requestedParallel = Number(options.parallel || 1);
@@ -79,7 +80,7 @@ export async function processFolder(config, store, folderId, options = {}) {
     cursor += 1;
     if (!video) return;
     try {
-      const processed = await processVideo(config, video, folder);
+      const processed = await processVideo(config, video, folder, options);
       await enqueueWrite(() => store.updateVideo(video.id, processed));
       if (processed.processing.status === "indexed") indexed += 1;
       else needsReview += 1;
@@ -140,11 +141,22 @@ export async function relabelFolder(config, store, folderId) {
   return { folderId, videos: videos.length, indexed, needsReview };
 }
 
-export async function processVideo(config, video, folder) {
+export async function processVideo(config, video, folder, options = {}) {
   const next = structuredClone(video);
   const errors = [];
+  const forceTranscribe = Boolean(options.forceTranscribe);
+  const promptInfo = shouldUseTranscriptionPrompt(config, options)
+    ? buildTranscriptionPrompt(config, folder, options)
+    : null;
+  const transcriptionOptions = promptInfo ? {
+    prompt: promptInfo.prompt,
+    promptHash: promptInfo.hash,
+    promptNameCount: promptInfo.nameCount,
+    promptPhraseVersion: promptInfo.phraseVersion,
+    carryInitialPrompt: options.carryInitialPrompt !== false
+  } : {};
 
-  if (next.transcript?.source === "microsoft_transcript" && !next.transcript.text) {
+  if (!forceTranscribe && next.transcript?.source === "microsoft_transcript" && !next.transcript.text) {
     try {
       next.transcript = await cacheTranscript(next, config);
     } catch (error) {
@@ -152,15 +164,15 @@ export async function processVideo(config, video, folder) {
     }
   }
 
-  if (!next.transcript?.text && next.localAudioPath) {
-    next.transcript = await transcribeAudio(config, next.localAudioPath);
+  if ((forceTranscribe || !next.transcript?.text) && next.localAudioPath) {
+    next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
   }
 
-  if (!next.transcript?.text && next.downloadUrl) {
+  if ((forceTranscribe || !next.transcript?.text) && (next.downloadUrl || next.localVideoPath)) {
     try {
-      next.localVideoPath = await mirrorVideo(next, folder, config);
+      if (!next.localVideoPath) next.localVideoPath = await mirrorVideo(next, folder, config);
       next.localAudioPath = await extractAudio(next.localVideoPath, config);
-      next.transcript = await transcribeAudio(config, next.localAudioPath);
+      next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
     } catch (error) {
       errors.push(`Media transcription failed: ${error.message}`);
     }
@@ -173,7 +185,13 @@ export async function processVideo(config, video, folder) {
       localPath: next.transcript.localPath || "",
       model: next.transcript.model || "",
       textLength: String(next.transcript.text || "").length,
-      segmentCount: Array.isArray(next.transcript.segments) ? next.transcript.segments.length : 0
+      segmentCount: Array.isArray(next.transcript.segments) ? next.transcript.segments.length : 0,
+      prompt: next.transcript.prompt ? {
+        hash: next.transcript.prompt.hash,
+        nameCount: next.transcript.prompt.nameCount,
+        phraseVersion: next.transcript.prompt.phraseVersion,
+        carryInitialPrompt: next.transcript.prompt.carryInitialPrompt
+      } : null
     };
   }
   const bestConfidence = Math.max(0, ...next.athleteLabels.map((label) => Number(label.confidence) || 0));

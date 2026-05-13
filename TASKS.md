@@ -3,7 +3,7 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Improve Jobs panel: highlight running jobs and provide inspectable logs during and after execution.
+- Implement optional Whisper transcription prompts and validate on Jan 9.
 
 ## Completed
 
@@ -70,6 +70,13 @@
 - Job inspect view refreshes while the inspected job is still running and remains available after completion.
 - Browser validation passed for the Jobs panel Inspect link. Job `job_c71e982689f85184` shows start, progress entries such as `Processed 132/135`, and completion.
 - Cached browser-triggered reprocess generated a new full job log with 38 entries.
+- Added opt-in event-aware transcription prompts for Whisper via `TRANSCRIPTION_PROMPT=1` or CLI `--transcription-prompt`.
+- Prompt context includes ski-race phrases such as `run two`, venue/discipline/date, TPT/TPTA terms, and prioritized Live-Timing roster names.
+- Prompt metadata is stored in transcript records and compact `transcriptRef` metadata.
+- Added CLI `--transcription-prompt-max-names n` to tune roster prompt size.
+- Jan 9 baseline before prompting: 35 indexed, 82 review, 116 transcripts, 25 `run two` mentions, 12 `run to` mentions.
+- Jan 9 first prompted run with 80 names: 39 indexed, 78 review, but phrase output regressed with only 2 `run two` mentions and prompt-induced artifacts such as `Rantu`.
+- Jan 9 second prompted run with 20 names: 41 indexed, 76 review, 0 failed, 117 prompted transcripts, 48 `run two` mentions, 0 `run to` mentions.
 
 ## In Progress
 

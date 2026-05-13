@@ -28,6 +28,7 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 - Local-only relabeling from cached transcripts for prompt/rule iteration without media downloads.
 - Local Apple Silicon optimized MLX Whisper transcription hook.
 - Local whisper.cpp transcription fallback using `/opt/homebrew/bin/whisper-cli` and `data/models/ggml-base.en.bin` when MLX/Metal is unavailable to the runner.
+- Optional event-aware transcription prompts for Whisper. Use `TRANSCRIPTION_PROMPT=1` or CLI `--transcription-prompt` to bias decoding toward ski phrases such as `run two` and Live-Timing roster names while preserving prompt metadata on transcript refs.
 - OpenAI transcription and labeler hooks as optional fallbacks when `OPENAI_API_KEY` is available.
 - Event detail view with status/confidence filters, event-local search, Live-Timing assets, app playback links, source SharePoint links, and embedded local video players.
 - Event list actions are ordered by dependency with mouse-over tooltips: `View` ensures the SharePoint video list and opens the event table, `Live` refreshes race correlation, `Prepare` runs View/Live dependencies plus metadata relabeling, and `Process` runs all dependencies before download/transcription/indexing with four workers by default.
@@ -53,6 +54,8 @@ npm run cli -- correlate-folder-live-timing <folderId>
 npm run cli -- prepare-folder <folderId>
 npm run cli -- prepare-folder-rest <serverRelativeUrl>
 npm run cli -- process-folder <folderId> --parallel 4
+npm run cli -- process-folder <folderId> --parallel 4 --force-transcribe --transcription-prompt
+npm run cli -- process-folder <folderId> --parallel 4 --force-transcribe --transcription-prompt --transcription-prompt-max-names 20
 npm run cli -- relabel-folder <folderId>
 npm run cli -- process-video <videoId>
 npm run cli -- export-lean

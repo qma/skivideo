@@ -27,6 +27,8 @@ export function loadConfig() {
     openaiApiKey: process.env.OPENAI_API_KEY || "",
     openaiTranscribeModel: process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
     openaiLabelModel: process.env.OPENAI_LABEL_MODEL || "gpt-4o-mini",
+    transcriptionPromptEnabled: /^(1|true|yes)$/i.test(process.env.TRANSCRIPTION_PROMPT || ""),
+    transcriptionPromptMaxNames: Number(process.env.TRANSCRIPTION_PROMPT_MAX_NAMES || 80),
     metadataBackend: process.env.METADATA_BACKEND || "local",
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
     firebaseDatabaseId: process.env.FIREBASE_DATABASE_ID || "(default)",

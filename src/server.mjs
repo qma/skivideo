@@ -95,13 +95,19 @@ app.post("/api/prepare-folder", asyncRoute((req) => prepareEventFolder(config, s
 })));
 app.post("/api/ensure-folder-manifest", asyncRoute((req) => ensureFolderManifest(config, store, req.body.folderId)));
 app.post("/api/process-folder", asyncRoute((req) => processFolder(config, store, req.body.folderId, {
-  parallel: req.body.parallel || 4
+  parallel: req.body.parallel || 4,
+  forceTranscribe: Boolean(req.body.forceTranscribe),
+  transcriptionPrompt: req.body.transcriptionPrompt
 })));
 app.post("/api/process-folder-async", asyncRoute(async (req) => {
   const folderId = req.body.folderId;
   if (!folderId) throw new Error("folderId is required.");
   const parallel = normalizeParallel(req.body.parallel, 4);
-  processFolder(config, store, folderId, { parallel }).catch((error) => {
+  processFolder(config, store, folderId, {
+    parallel,
+    forceTranscribe: Boolean(req.body.forceTranscribe),
+    transcriptionPrompt: req.body.transcriptionPrompt
+  }).catch((error) => {
     console.error(`Background processing failed for ${folderId}:`, error);
   });
   return {

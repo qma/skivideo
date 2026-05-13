@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { slugify } from "../lib/ids.mjs";
@@ -25,7 +26,7 @@ export async function transcribeAudio(config, audioPath, options = {}) {
   const backends = await detectTranscriptionBackends(config);
   if (backends.mlxWhisper) return transcribeWithMlxWhisper(config, audioPath, options);
   if (backends.whisperCpp) return transcribeWithWhisperCpp(config, audioPath, options);
-  if (backends.openai) return transcribeWithOpenAi(config, audioPath);
+  if (backends.openai) return transcribeWithOpenAi(config, audioPath, options);
   throw new Error("No transcription backend is available. Run scripts/install-whisper.sh or install whisper.cpp with a ggml model.");
 }
 
@@ -60,7 +61,8 @@ export async function transcribeWithMlxWhisper(config, audioPath, options = {}) 
     text: raw.text || "",
     segments: raw.segments || [],
     localPath: outPath,
-    model
+    model,
+    prompt: promptMetadata(options)
   };
 }
 
@@ -76,12 +78,13 @@ async function ensureFfmpegCommandShim(config, ffmpegPath) {
   return binDir;
 }
 
-export async function transcribeWithOpenAi(config, audioPath) {
+export async function transcribeWithOpenAi(config, audioPath, options = {}) {
   const file = await fs.readFile(audioPath);
   const form = new FormData();
   form.set("model", config.openaiTranscribeModel);
   form.set("file", new Blob([file]), path.basename(audioPath));
   form.set("response_format", "json");
+  if (options.prompt) form.set("prompt", options.prompt);
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { authorization: `Bearer ${config.openaiApiKey}` },
@@ -96,7 +99,8 @@ export async function transcribeWithOpenAi(config, audioPath) {
     text: json.text || "",
     segments: json.segments || [],
     localPath: "",
-    model: config.openaiTranscribeModel
+    model: config.openaiTranscribeModel,
+    prompt: promptMetadata(options)
   };
 }
 
@@ -106,8 +110,8 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
   const inputPath = await ensureWhisperCppAudio(config, audioPath);
   const outDir = path.join(config.transcriptDir, slugify(path.basename(audioPath)));
   await fs.mkdir(outDir, { recursive: true });
-  const outputBase = path.join(outDir, "whisper-cpp");
-  await run(command, [
+  const outputBase = path.join(outDir, options.prompt ? `whisper-cpp-prompted-${promptHash(options.prompt)}` : "whisper-cpp");
+  const args = [
     "-ng",
     "-m", model,
     "-f", inputPath,
@@ -116,7 +120,12 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
     "-of", outputBase,
     "-np",
     "-l", "en"
-  ], { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
+  ];
+  if (options.prompt) {
+    args.push("--prompt", options.prompt);
+    if (options.carryInitialPrompt !== false) args.push("--carry-initial-prompt");
+  }
+  await run(command, args, { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
   const outPath = `${outputBase}.json`;
   const raw = JSON.parse(await fs.readFile(outPath, "utf8"));
   const segments = (raw.transcription || []).map((segment) => ({
@@ -129,8 +138,24 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
     text: segments.map((segment) => segment.text).join(" ").replace(/\s+/g, " ").trim(),
     segments,
     localPath: outPath,
-    model
+    model,
+    prompt: promptMetadata(options)
   };
+}
+
+function promptMetadata(options = {}) {
+  if (!options.prompt) return null;
+  return {
+    hash: options.promptHash || promptHash(options.prompt),
+    text: options.prompt,
+    nameCount: options.promptNameCount || 0,
+    phraseVersion: options.promptPhraseVersion || "",
+    carryInitialPrompt: options.carryInitialPrompt !== false
+  };
+}
+
+function promptHash(prompt) {
+  return createHash("sha1").update(prompt).digest("hex").slice(0, 10);
 }
 
 async function whisperCppWorks(config) {

@@ -61,7 +61,11 @@ async function processFolderCommand(args) {
   const folderId = positionals[0];
   if (!folderId) throw new Error("Folder id is required.");
   return printJson(await processFolder(config, store, folderId, {
-    parallel: options.parallel || 1
+    parallel: options.parallel || 1,
+    forceTranscribe: Boolean(options.forceTranscribe),
+    transcriptionPrompt: options.transcriptionPrompt,
+    carryInitialPrompt: options.carryInitialPrompt,
+    maxNames: options.transcriptionPromptMaxNames
   }));
 }
 
@@ -241,7 +245,7 @@ Commands:
   ingest-oldest-sharepoint-folder
   prepare-folder <folderId>
   prepare-folder-rest <serverRelativeUrl>
-  process-folder <folderId> [--parallel n]
+  process-folder <folderId> [--parallel n] [--force-transcribe] [--transcription-prompt]
   relabel-folder <folderId>
   process-video <videoId>
   export-lean
@@ -265,6 +269,19 @@ function parseArgs(args) {
       i += 1;
     } else if (arg.startsWith("--parallel=")) {
       options.parallel = Number(arg.slice("--parallel=".length));
+    } else if (arg === "--force-transcribe") {
+      options.forceTranscribe = true;
+    } else if (arg === "--transcription-prompt") {
+      options.transcriptionPrompt = true;
+    } else if (arg === "--no-transcription-prompt") {
+      options.transcriptionPrompt = false;
+    } else if (arg === "--no-carry-initial-prompt") {
+      options.carryInitialPrompt = false;
+    } else if (arg === "--transcription-prompt-max-names") {
+      options.transcriptionPromptMaxNames = Number(args[i + 1]);
+      i += 1;
+    } else if (arg.startsWith("--transcription-prompt-max-names=")) {
+      options.transcriptionPromptMaxNames = Number(arg.slice("--transcription-prompt-max-names=".length));
     } else {
       positionals.push(arg);
     }
