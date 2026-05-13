@@ -4,7 +4,7 @@
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
 - Low-data mode is lifted; resume full media mirroring/transcription/indexing where needed.
-- Fully process Jan 10 Northstar Day 2 now that downloads are allowed, then relabel/export/verify the searchable UI.
+- Validate the completed Jan 10 Northstar Day 2 processing run, keep the web app running for browsing, then commit the task ledger.
 
 ## Completed
 
@@ -38,11 +38,16 @@
 - Jan 10 event view verified in low-data mode: 130 SharePoint-only videos render in the event table with Live-Timing assets, roster-backed labels, and manual review controls.
 - Web app loading changed to lazy metadata endpoints: startup uses compact `/api/summary`, event view uses `/api/event?folderId=...`, and search uses `/api/search` so the browser does not load every video/transcript record at once.
 - whisper.cpp fallback added and validated with `ggml-base.en.bin` because MLX Whisper is installed but cannot access Metal from this runner.
+- Jan 10 Northstar Day 2 full processing completed with `--parallel 4`: 130 videos mirrored, 130 videos processed, 45 indexed, 85 review, 0 failed. 118 videos have non-empty whisper.cpp transcripts.
+- Lean metadata export refreshed after Jan 10 processing.
+- Web app server restarted and verified in the in-app browser at `http://127.0.0.1:4173/`, bound internally to `0.0.0.0:4173`.
+- Current index has no Jan 8 event folder. Northstar race folders in the index are Jan 9, Jan 10, and Jan 11; Jan 9 and Jan 10 have processed video rows.
+- Browser validation passed for Jan 10 event view and event-local `Hannah Davidson` search after full processing.
 
 ## In Progress
 
-- Full Jan 10 media processing from the existing prepared folder.
+- None.
 
 ## Next
 
-- After Jan 10 processing completes, refresh the lean export, verify event search/browser behavior, and commit the finished checkpoint.
+- None queued.
