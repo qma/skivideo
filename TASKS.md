@@ -3,7 +3,7 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Implement optional Whisper transcription prompts and validate on Jan 9.
+- Validate web-triggered processing for a non-race training event: `GS Camp April 24`.
 
 ## Completed
 
@@ -77,6 +77,8 @@
 - Jan 9 baseline before prompting: 35 indexed, 82 review, 116 transcripts, 25 `run two` mentions, 12 `run to` mentions.
 - Jan 9 first prompted run with 80 names: 39 indexed, 78 review, but phrase output regressed with only 2 `run two` mentions and prompt-induced artifacts such as `Rantu`.
 - Jan 9 second prompted run with 20 names: 41 indexed, 76 review, 0 failed, 117 prompted transcripts, 48 `run two` mentions, 0 `run to` mentions.
+- Triggered `GS Camp April 24` from the web app. Job `job_ce1f0330819e3444` correctly matched 0 Live-Timing races and continued into media processing.
+- `GS Camp April 24` web-triggered processing completed: 13 videos, 13 local media/transcripts, 0 indexed, 13 review, 0 failed. Browser list shows `Processed + review`.
 
 ## In Progress
 
