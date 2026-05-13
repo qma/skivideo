@@ -95,13 +95,23 @@ export class JsonStore {
 
   async addJob(job) {
     const store = await this.read();
-    store.jobs = [job, ...store.jobs.filter((existing) => existing.id !== job.id)].slice(0, 50);
+    const nextJob = {
+      ...job,
+      logs: normalizeJobLogs(job, job.logs)
+    };
+    store.jobs = [nextJob, ...store.jobs.filter((existing) => existing.id !== job.id)].slice(0, 50);
     return this.write(store);
   }
 
   async updateJob(jobId, patch) {
     const store = await this.read();
-    store.jobs = store.jobs.map((job) => job.id === jobId ? { ...job, ...patch, updatedAt: nowIso() } : job);
+    const updatedAt = nowIso();
+    store.jobs = store.jobs.map((job) => {
+      if (job.id !== jobId) return job;
+      const nextJob = { ...job, ...patch, updatedAt };
+      nextJob.logs = appendJobLog(job, nextJob, updatedAt);
+      return nextJob;
+    });
     return this.write(store);
   }
 
@@ -145,6 +155,39 @@ export function buildLeanStore(store) {
 function snippet(text, maxLength) {
   const value = String(text || "");
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function normalizeJobLogs(job, logs = []) {
+  if (Array.isArray(logs) && logs.length) return logs.slice(-500);
+  return [jobLogEntry(job, job.startedAt || job.updatedAt || nowIso())];
+}
+
+function appendJobLog(previous, next, at) {
+  const logs = normalizeJobLogs(previous, previous.logs);
+  const last = logs[logs.length - 1] || {};
+  const entry = jobLogEntry(next, at);
+  if (
+    last.status === entry.status
+    && last.message === entry.message
+    && last.indexed === entry.indexed
+    && last.needsReview === entry.needsReview
+    && last.failed === entry.failed
+  ) {
+    return logs;
+  }
+  return [...logs, entry].slice(-500);
+}
+
+function jobLogEntry(job, at) {
+  return {
+    at,
+    status: job.status || "",
+    message: job.message || "",
+    indexed: job.indexed || 0,
+    needsReview: job.needsReview || 0,
+    failed: job.failed || 0,
+    parallel: job.parallel || 0
+  };
 }
 
 function mergeFolder(existing = {}, incoming = {}) {

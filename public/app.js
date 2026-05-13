@@ -7,7 +7,9 @@ const state = {
   eventQuery: "",
   eventStatus: "",
   eventConfidence: "",
-  jobPollTimer: null
+  jobPollTimer: null,
+  selectedJobId: "",
+  jobLogTimer: null
 };
 
 const actionTips = {
@@ -38,6 +40,11 @@ function bindActions() {
   el("syncMetadata").addEventListener("click", () => action("/api/sync-metadata"));
   el("manifestFolder").addEventListener("click", () => action("/api/manifest-sharepoint", { folderUrl: el("folderUrl").value }));
   el("manifestRestFolder").addEventListener("click", () => action("/api/manifest-sharepoint-rest", { serverRelativeUrl: el("serverRelativeUrl").value }));
+  el("logDialog").addEventListener("close", () => {
+    state.selectedJobId = "";
+    if (state.jobLogTimer) clearTimeout(state.jobLogTimer);
+    state.jobLogTimer = null;
+  });
   el("closeEventView").addEventListener("click", () => {
     state.selectedFolderId = "";
     state.eventDetail = null;
@@ -278,9 +285,13 @@ function eventVideoMatchesFilters(video) {
 
 function renderJobsAndEvents() {
   const jobs = state.summary.jobs.slice(0, 8).map((job) => `
-    <article class="item">
-      <strong>${escapeHtml([job.type, job.folderName].filter(Boolean).join(" · "))}</strong>
-      <p>${escapeHtml(job.status)} · ${escapeHtml(job.message || "")}</p>
+    <article class="item jobItem ${jobClass(job)}">
+      <div class="jobHeader">
+        <strong>${escapeHtml([job.type, job.folderName].filter(Boolean).join(" · "))}</strong>
+        <a class="jobInspect" href="${escapeAttr(jobHref(job.id))}">Inspect</a>
+      </div>
+      <p><span class="jobStatusDot"></span>${escapeHtml(job.status)} · ${escapeHtml(job.message || "")}</p>
+      <div class="jobMeta">${escapeHtml(jobMeta(job))}</div>
     </article>
   `).join("") || `<p class="muted">No jobs yet.</p>`;
 
@@ -346,6 +357,12 @@ async function startProcessing(folderId) {
 
 async function runUrlAction() {
   const params = new URLSearchParams(window.location.search);
+  const jobId = params.get("jobId");
+  if (jobId) {
+    window.history.replaceState({}, "", window.location.pathname);
+    await showJobLog(jobId);
+    return;
+  }
   const actionName = params.get("action");
   const folderId = params.get("folderId");
   if (!actionName || !folderId) return;
@@ -401,6 +418,42 @@ function scheduleJobPolling(force = false) {
   }, 2500);
 }
 
+async function showJobLog(jobId) {
+  try {
+    state.selectedJobId = jobId;
+    const detail = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
+    renderJobLog(detail);
+    if (!el("logDialog").open) el("logDialog").showModal();
+    if (detail.job.status === "running") {
+      if (state.jobLogTimer) clearTimeout(state.jobLogTimer);
+      state.jobLogTimer = setTimeout(() => {
+        if (state.selectedJobId === jobId && el("logDialog").open) showJobLog(jobId);
+      }, 2500);
+    }
+  } catch (error) {
+    showLog({ error: error.message });
+  }
+}
+
+function renderJobLog(detail) {
+  const job = detail.job;
+  const lines = [
+    `${job.type || "job"}${job.folderName ? ` · ${job.folderName}` : ""}`,
+    `id: ${job.id}`,
+    `status: ${job.status}`,
+    `started: ${formatDateTime(job.startedAt)}`,
+    job.completedAt ? `completed: ${formatDateTime(job.completedAt)}` : "",
+    job.parallel ? `parallel: ${job.parallel}` : "",
+    "",
+    "Log",
+    ...detail.logs.map((entry) => {
+      const counts = [entry.indexed ? `${entry.indexed} indexed` : "", entry.needsReview ? `${entry.needsReview} review` : "", entry.failed ? `${entry.failed} failed` : ""].filter(Boolean).join(", ");
+      return `${formatDateTime(entry.at)}  ${entry.status || "-"}  ${entry.message || ""}${counts ? ` (${counts})` : ""}`;
+    })
+  ].filter((line) => line !== "");
+  el("logOutput").textContent = lines.join("\n");
+}
+
 async function api(path, options) {
   const response = await fetch(path, options);
   const json = await response.json();
@@ -409,6 +462,9 @@ async function api(path, options) {
 }
 
 function showLog(value) {
+  state.selectedJobId = "";
+  if (state.jobLogTimer) clearTimeout(state.jobLogTimer);
+  state.jobLogTimer = null;
   el("logOutput").textContent = JSON.stringify(value, null, 2);
   el("logDialog").showModal();
 }
@@ -461,4 +517,37 @@ function playbackHref(video) {
 
 function actionHref(actionName, folderId) {
   return `/?action=${encodeURIComponent(actionName)}&folderId=${encodeURIComponent(folderId)}`;
+}
+
+function jobHref(jobId) {
+  return `/?jobId=${encodeURIComponent(jobId)}`;
+}
+
+function jobClass(job) {
+  if (job.status === "running") return "jobRunning";
+  if (job.status === "completed") return "jobCompleted";
+  if (job.status === "completed_with_errors" || job.status === "failed") return "jobFailed";
+  if (job.status === "stale") return "jobStale";
+  return "";
+}
+
+function jobMeta(job) {
+  return [
+    job.startedAt ? `started ${formatDateTime(job.startedAt)}` : "",
+    job.updatedAt ? `updated ${formatDateTime(job.updatedAt)}` : "",
+    job.logCount ? `${job.logCount} log entries` : ""
+  ].filter(Boolean).join(" · ");
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit"
+  });
 }

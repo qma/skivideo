@@ -34,6 +34,7 @@ The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](
 - Event review controls for manual athlete correction and label clearing without media downloads.
 - Lazy web loading: startup reads `/api/summary`, selected events read `/api/event?folderId=...`, and global search reads `/api/search` instead of loading the full store into the browser.
 - Background processing from the web UI returns immediately and the Jobs panel refreshes while processing is running, so progress is visible without waiting on a single long HTTP response.
+- Jobs are color-coded by status and each job has an Inspect link backed by `/api/job`, with persisted progress logs available during and after processing.
 - Optional Firestore metadata sync through Firebase service-account credentials.
 - App playback links in search results. `/media/:videoId` serves cached local media or proxies SharePoint through the original public shared-link session when the video is not mirrored locally.
 

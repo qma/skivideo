@@ -3,7 +3,7 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Organize event actions by dependency and make each action execute unmet dependencies automatically.
+- Improve Jobs panel: highlight running jobs and provide inspectable logs during and after execution.
 
 ## Completed
 
@@ -64,6 +64,12 @@
 - Browser validation passed for link-based `View`: Jan 11 opened through `?action=view&folderId=...`, imported 135 SharePoint video records, rendered the event view, and cleared the URL.
 - Browser validation passed for link-based `Process`: Jan 11 started `job_06e67edd6e79c2cf` with `parallel: 4` and showed the running job in the Jobs panel.
 - Jan 11 Northstar Day 3 processing completed through the browser-triggered process workflow: 135 processed, 34 indexed, 101 review, 0 failed, 135 local videos/transcripts.
+- Job records now preserve message history in `logs` as jobs update.
+- Added `/api/job?id=...` for inspecting a single job with full log entries.
+- Jobs panel now styles running/completed/error/stale jobs distinctly and includes an Inspect link for each job.
+- Job inspect view refreshes while the inspected job is still running and remains available after completion.
+- Browser validation passed for the Jobs panel Inspect link. Job `job_c71e982689f85184` shows start, progress entries such as `Processed 132/135`, and completion.
+- Cached browser-triggered reprocess generated a new full job log with 38 entries.
 
 ## In Progress
 

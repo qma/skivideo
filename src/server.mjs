@@ -30,6 +30,7 @@ app.get("/api/config", asyncRoute(async () => ({
 })));
 app.get("/api/store", asyncRoute(() => store.read()));
 app.get("/api/summary", asyncRoute(() => summary()));
+app.get("/api/job", asyncRoute((req) => jobDetail(req.query.id || "")));
 app.get("/api/event", asyncRoute((req) => eventDetail(req.query.folderId || "")));
 app.get("/api/search", asyncRoute((req) => search(req.query.q || "")));
 
@@ -275,12 +276,50 @@ function summarizeJob(job, foldersById) {
   const staleAfterMs = 60 * 60 * 1000;
   const updatedAt = Date.parse(job.updatedAt || job.startedAt || "");
   const isStale = job.status === "running" && Number.isFinite(updatedAt) && Date.now() - updatedAt > staleAfterMs;
+  const logs = jobLogs(job);
+  const { logs: _logs, ...summaryJob } = job;
   return {
-    ...job,
+    ...summaryJob,
     status: isStale ? "stale" : job.status,
     folderName: foldersById.get(job.folderId)?.name || "",
-    stale: isStale
+    stale: isStale,
+    logCount: logs.length
   };
+}
+
+async function jobDetail(jobId) {
+  if (!jobId) throw new Error("job id is required.");
+  const state = await store.read();
+  const foldersById = new Map(state.folders.map((folder) => [folder.id, folder]));
+  const job = state.jobs.find((item) => item.id === jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+  return {
+    ok: true,
+    job: summarizeJob(job, foldersById),
+    logs: jobLogs(job)
+  };
+}
+
+function jobLogs(job) {
+  if (Array.isArray(job.logs) && job.logs.length) return job.logs;
+  const entries = [{
+    at: job.startedAt || job.updatedAt || "",
+    status: job.status || "",
+    message: job.message || "",
+    indexed: job.indexed || 0,
+    needsReview: job.needsReview || 0,
+    failed: job.failed || 0,
+    parallel: job.parallel || 0
+  }];
+  if (job.completedAt && job.completedAt !== entries[0].at) {
+    entries.push({
+      ...entries[0],
+      at: job.completedAt,
+      status: job.status || "",
+      message: job.message || ""
+    });
+  }
+  return entries;
 }
 
 async function eventDetail(folderId) {
