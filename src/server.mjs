@@ -98,6 +98,8 @@ app.post("/api/process-folder", asyncRoute((req) => processFolder(config, store,
   parallel: req.body.parallel || 4,
   forceTranscribe: Boolean(req.body.forceTranscribe),
   transcriptionPrompt: req.body.transcriptionPrompt,
+  noDownload: Boolean(req.body.noDownload),
+  reprocess: Boolean(req.body.reprocess),
   whisperCppNoGpu: booleanOrUndefined(req.body.whisperCppNoGpu)
 })));
 app.post("/api/process-folder-async", asyncRoute(async (req) => {
@@ -108,6 +110,8 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
     parallel,
     forceTranscribe: Boolean(req.body.forceTranscribe),
     transcriptionPrompt: req.body.transcriptionPrompt,
+    noDownload: Boolean(req.body.noDownload),
+    reprocess: Boolean(req.body.reprocess),
     whisperCppNoGpu: booleanOrUndefined(req.body.whisperCppNoGpu)
   }).catch((error) => {
     console.error(`Background processing failed for ${folderId}:`, error);

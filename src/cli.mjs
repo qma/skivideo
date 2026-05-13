@@ -66,6 +66,8 @@ async function processFolderCommand(args) {
     transcriptionPrompt: options.transcriptionPrompt,
     carryInitialPrompt: options.carryInitialPrompt,
     maxNames: options.transcriptionPromptMaxNames,
+    noDownload: Boolean(options.noDownload),
+    reprocess: Boolean(options.reprocess),
     whisperCppNoGpu: options.whisperCppNoGpu
   }));
 }
@@ -246,7 +248,7 @@ Commands:
   ingest-oldest-sharepoint-folder
   prepare-folder <folderId>
   prepare-folder-rest <serverRelativeUrl>
-  process-folder <folderId> [--parallel n] [--force-transcribe] [--transcription-prompt] [--whisper-cpp-no-gpu]
+  process-folder <folderId> [--parallel n] [--force-transcribe] [--no-download] [--reprocess] [--transcription-prompt] [--whisper-cpp-no-gpu]
   relabel-folder <folderId>
   process-video <videoId>
   export-lean
@@ -272,6 +274,12 @@ function parseArgs(args) {
       options.parallel = Number(arg.slice("--parallel=".length));
     } else if (arg === "--force-transcribe") {
       options.forceTranscribe = true;
+    } else if (arg === "--no-download" || arg === "--local-only") {
+      options.noDownload = true;
+    } else if (arg === "--reprocess") {
+      options.reprocess = true;
+      options.forceTranscribe = true;
+      options.noDownload = true;
     } else if (arg === "--transcription-prompt") {
       options.transcriptionPrompt = true;
     } else if (arg === "--no-transcription-prompt") {

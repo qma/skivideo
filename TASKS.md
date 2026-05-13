@@ -86,6 +86,11 @@
 - Web app restarted after the GS Camp April 25 job completed; browser reload confirmed the app renders without the JSON parse error.
 - Event preview videos are larger, audible by default, and always use `/media/:videoId`, which prefers local cached media and falls back to the SharePoint source path when local media is unavailable.
 - Browser validation passed for Apr 25 local previews and Dec 30 mixed local/source fallback previews.
+- Added `Re-Process` event action with confirmation. It starts a `reprocess_folder` job with `forceTranscribe`, `noDownload`, and default parallel 4.
+- Added CLI `process-folder --reprocess`, which implies `--force-transcribe --no-download`, plus explicit `--no-download`/`--local-only`.
+- Reprocess workflow retranscribes from existing local audio/video and relabels; videos without local media are skipped without triggering SharePoint downloads.
+- Browser validation confirmed the `Re-Process` action is visible. Backend validation passed with a sample no-download `reprocess_folder` job: 2 indexed, 0 review, 0 failed.
+- GS Dec 30, 2025 processing completed: 56 videos, 0 indexed, 56 review, 0 failed.
 
 ## In Progress
 

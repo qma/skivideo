@@ -16,7 +16,8 @@ const actionTips = {
   view: "Ensure the SharePoint video list if missing, then open this event's table. Does not download media.",
   live: "Refresh Live-Timing race correlation, racer roster, and linked assets. Does not download media.",
   prepare: "Run View and Live dependencies if needed, then relabel from existing metadata/transcripts. Does not download media.",
-  process: "Run View, Live, and Prepare dependencies if needed, then download/mirror videos, transcribe, label, and update the index with parallel 4."
+  process: "Run View, Live, and Prepare dependencies if needed, then download/mirror videos, transcribe, label, and update the index with parallel 4.",
+  reprocess: "Force retranscription and relabeling from existing local media/audio only. Does not download missing media."
 };
 
 const el = (id) => document.getElementById(id);
@@ -146,6 +147,7 @@ function renderFolders() {
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("live", folder.id))}" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("reprocess", folder.id))}" title="${escapeAttr(actionTips.reprocess)}" aria-label="${escapeAttr(actionTips.reprocess)}">Re-Process</a>
         </div>
       </article>
     `;
@@ -358,6 +360,19 @@ async function startProcessing(folderId) {
   if (result?.ok) scheduleJobPolling(true);
 }
 
+async function startReprocessing(folderId) {
+  const confirmed = window.confirm("Re-process this event from local media only? This retranscribes and relabels existing local audio/video, but skips videos that are not already cached.");
+  if (!confirmed) return;
+  const result = await action("/api/process-folder-async", {
+    folderId,
+    parallel: 4,
+    forceTranscribe: true,
+    noDownload: true,
+    reprocess: true
+  });
+  if (result?.ok) scheduleJobPolling(true);
+}
+
 async function runUrlAction() {
   const params = new URLSearchParams(window.location.search);
   const jobId = params.get("jobId");
@@ -378,6 +393,8 @@ async function runUrlAction() {
     await action("/api/prepare-folder", { folderId });
   } else if (actionName === "process") {
     await startProcessing(folderId);
+  } else if (actionName === "reprocess") {
+    await startReprocessing(folderId);
   }
 }
 

@@ -151,7 +151,7 @@ select {
 .eventListHeader,
 .eventRow {
   display: grid;
-  grid-template-columns: 112px minmax(220px, 1fr) 146px 92px 132px 250px;
+  grid-template-columns: 112px minmax(220px, 1fr) 146px 92px 132px 330px;
   gap: 8px;
   align-items: center;
 }

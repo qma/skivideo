@@ -10,15 +10,17 @@ export async function processFolder(config, store, folderId, options = {}) {
   const parallel = Number.isFinite(requestedParallel) ? Math.max(1, Math.min(16, Math.floor(requestedParallel))) : 1;
   const startedAt = nowIso();
   const jobId = stableId("job", `${folderId}:${startedAt}`);
+  const jobType = options.reprocess ? "reprocess_folder" : "process_folder";
+  const actionLabel = options.reprocess ? "Re-processing" : "Processing";
   await store.addJob({
     id: jobId,
-    type: "process_folder",
+    type: jobType,
     folderId,
     status: "running",
     startedAt,
     updatedAt: startedAt,
     parallel,
-    message: `Processing started with ${parallel} worker${parallel === 1 ? "" : "s"}`
+    message: `${actionLabel} started with ${parallel} worker${parallel === 1 ? "" : "s"}`
   });
 
   let state = await store.read();
@@ -145,6 +147,8 @@ export async function processVideo(config, video, folder, options = {}) {
   const next = structuredClone(video);
   const errors = [];
   const forceTranscribe = Boolean(options.forceTranscribe);
+  const allowDownload = options.noDownload !== true;
+  let transcribedThisRun = false;
   const promptInfo = shouldUseTranscriptionPrompt(config, options)
     ? buildTranscriptionPrompt(config, folder, options)
     : null;
@@ -171,15 +175,31 @@ export async function processVideo(config, video, folder, options = {}) {
 
   if ((forceTranscribe || !next.transcript?.text) && next.localAudioPath) {
     next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
+    transcribedThisRun = true;
   }
 
-  if ((forceTranscribe || !next.transcript?.text) && (next.downloadUrl || next.localVideoPath)) {
+  if (((forceTranscribe && !transcribedThisRun) || !next.transcript?.text) && next.localVideoPath) {
     try {
-      if (!next.localVideoPath) next.localVideoPath = await mirrorVideo(next, folder, config);
       next.localAudioPath = await extractAudio(next.localVideoPath, config);
       next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
+      transcribedThisRun = true;
     } catch (error) {
       errors.push(`Media transcription failed: ${error.message}`);
+    }
+  }
+
+  if (((forceTranscribe && !transcribedThisRun) || !next.transcript?.text) && !next.localVideoPath && next.downloadUrl) {
+    if (allowDownload) {
+      try {
+        next.localVideoPath = await mirrorVideo(next, folder, config);
+        next.localAudioPath = await extractAudio(next.localVideoPath, config);
+        next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
+        transcribedThisRun = true;
+      } catch (error) {
+        errors.push(`Media transcription failed: ${error.message}`);
+      }
+    } else {
+      errors.push("Media transcription skipped: local audio/video unavailable and downloads disabled.");
     }
   }
 
