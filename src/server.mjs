@@ -97,7 +97,8 @@ app.post("/api/ensure-folder-manifest", asyncRoute((req) => ensureFolderManifest
 app.post("/api/process-folder", asyncRoute((req) => processFolder(config, store, req.body.folderId, {
   parallel: req.body.parallel || 4,
   forceTranscribe: Boolean(req.body.forceTranscribe),
-  transcriptionPrompt: req.body.transcriptionPrompt
+  transcriptionPrompt: req.body.transcriptionPrompt,
+  whisperCppNoGpu: booleanOrUndefined(req.body.whisperCppNoGpu)
 })));
 app.post("/api/process-folder-async", asyncRoute(async (req) => {
   const folderId = req.body.folderId;
@@ -106,7 +107,8 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
   processFolder(config, store, folderId, {
     parallel,
     forceTranscribe: Boolean(req.body.forceTranscribe),
-    transcriptionPrompt: req.body.transcriptionPrompt
+    transcriptionPrompt: req.body.transcriptionPrompt,
+    whisperCppNoGpu: booleanOrUndefined(req.body.whisperCppNoGpu)
   }).catch((error) => {
     console.error(`Background processing failed for ${folderId}:`, error);
   });
@@ -152,6 +154,10 @@ function normalizeParallel(value, fallback) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(16, Math.floor(parsed)));
+}
+
+function booleanOrUndefined(value) {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 async function reviewVideo(body) {

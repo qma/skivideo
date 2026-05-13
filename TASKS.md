@@ -3,7 +3,6 @@
 ## Current Focus
 
 - Execute queued tasks to completion, using this file as the resumable work ledger.
-- Validate web-triggered processing for a non-race training event: `GS Camp April 24`.
 
 ## Completed
 
@@ -79,6 +78,9 @@
 - Jan 9 second prompted run with 20 names: 41 indexed, 76 review, 0 failed, 117 prompted transcripts, 48 `run two` mentions, 0 `run to` mentions.
 - Triggered `GS Camp April 24` from the web app. Job `job_ce1f0330819e3444` correctly matched 0 Live-Timing races and continued into media processing.
 - `GS Camp April 24` web-triggered processing completed: 13 videos, 13 local media/transcripts, 0 indexed, 13 review, 0 failed. Browser list shows `Processed + review`.
+- whisper.cpp transcription now omits `-ng` by default so Metal/GPU can be used when available.
+- Added explicit CPU-only controls: `WHISPER_CPP_NO_GPU=1`, CLI `--whisper-cpp-no-gpu`/`--no-whisper-gpu`, and API `whisperCppNoGpu: true`.
+- whisper.cpp transcript metadata now records whether GPU acceleration was enabled for that run.
 
 ## In Progress
 

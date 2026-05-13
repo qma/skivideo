@@ -107,12 +107,12 @@ export async function transcribeWithOpenAi(config, audioPath, options = {}) {
 export async function transcribeWithWhisperCpp(config, audioPath, options = {}) {
   const command = process.env.WHISPER_CPP_BIN || "/opt/homebrew/bin/whisper-cli";
   const model = options.model || process.env.WHISPER_CPP_MODEL || path.join(config.dataDir, "models", "ggml-base.en.bin");
+  const noGpu = shouldDisableWhisperCppGpu(config, options);
   const inputPath = await ensureWhisperCppAudio(config, audioPath);
   const outDir = path.join(config.transcriptDir, slugify(path.basename(audioPath)));
   await fs.mkdir(outDir, { recursive: true });
   const outputBase = path.join(outDir, options.prompt ? `whisper-cpp-prompted-${promptHash(options.prompt)}` : "whisper-cpp");
   const args = [
-    "-ng",
     "-m", model,
     "-f", inputPath,
     "-oj",
@@ -121,6 +121,7 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
     "-np",
     "-l", "en"
   ];
+  if (noGpu) args.unshift("-ng");
   if (options.prompt) {
     args.push("--prompt", options.prompt);
     if (options.carryInitialPrompt !== false) args.push("--carry-initial-prompt");
@@ -139,8 +140,18 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
     segments,
     localPath: outPath,
     model,
+    acceleration: {
+      backend: "whisper.cpp",
+      gpu: !noGpu
+    },
     prompt: promptMetadata(options)
   };
+}
+
+function shouldDisableWhisperCppGpu(config, options = {}) {
+  if (options.whisperCppNoGpu === true) return true;
+  if (options.whisperCppNoGpu === false) return false;
+  return Boolean(config.whisperCppNoGpu);
 }
 
 function promptMetadata(options = {}) {

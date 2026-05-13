@@ -148,13 +148,18 @@ export async function processVideo(config, video, folder, options = {}) {
   const promptInfo = shouldUseTranscriptionPrompt(config, options)
     ? buildTranscriptionPrompt(config, folder, options)
     : null;
-  const transcriptionOptions = promptInfo ? {
-    prompt: promptInfo.prompt,
-    promptHash: promptInfo.hash,
-    promptNameCount: promptInfo.nameCount,
-    promptPhraseVersion: promptInfo.phraseVersion,
-    carryInitialPrompt: options.carryInitialPrompt !== false
-  } : {};
+  const transcriptionOptions = {
+    whisperCppNoGpu: options.whisperCppNoGpu
+  };
+  if (promptInfo) {
+    Object.assign(transcriptionOptions, {
+      prompt: promptInfo.prompt,
+      promptHash: promptInfo.hash,
+      promptNameCount: promptInfo.nameCount,
+      promptPhraseVersion: promptInfo.phraseVersion,
+      carryInitialPrompt: options.carryInitialPrompt !== false
+    });
+  }
 
   if (!forceTranscribe && next.transcript?.source === "microsoft_transcript" && !next.transcript.text) {
     try {
@@ -184,6 +189,7 @@ export async function processVideo(config, video, folder, options = {}) {
       source: next.transcript.source,
       localPath: next.transcript.localPath || "",
       model: next.transcript.model || "",
+      acceleration: next.transcript.acceleration || null,
       textLength: String(next.transcript.text || "").length,
       segmentCount: Array.isArray(next.transcript.segments) ? next.transcript.segments.length : 0,
       prompt: next.transcript.prompt ? {
