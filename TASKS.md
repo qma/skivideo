@@ -2,7 +2,7 @@
 
 ## Current Focus
 
-- Handover completed. Researching next steps for the local-first web app and indexing pipeline.
+- Coordinate multi-agent publishing roadmap work through `docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md`.
 
 ## Completed
 
@@ -104,11 +104,17 @@
 - Optimized `/media/:videoId` to avoid proxying SharePoint videos; non-local rows use direct SharePoint source URLs and `/media/:videoId` redirects only as a fallback.
 - [codex] Cleaned up the old SharePoint proxy server code path and documentation. Verified local media returns `200 video/mp4` from `/media`, dataless/non-local `/media` returns `302` to SharePoint, and search API marks `P1000316.MP4` as `localVideoPlayable: false` so the UI uses its direct SharePoint source URL.
 - Project instructions added to `GEMINI.md` (e.g., commit message prefixing).
+- [codex] Added `docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md` covering static public publishing, hosted admin architecture, auth phases, multi-team/source model, and work packages for agent teams A-G.
 
 ## In Progress
-- Investigating potential UI improvements and data integrity checks.
+- None.
 
 ## Next
 
-- Add mobile-friendly responsive refinements to the event table.
-- Implement visual similarity propagation schema and basic UI placeholders.
+- Team A: implement static lean public app/export hardening.
+- Team B: formalize Firestore schema and sync migrations.
+- Team C: implement simple admin password gate.
+- Team D: extract worker/job queue.
+- Team E: refactor SharePoint behind source adapter interface.
+- Team F: choose Phase 1 hosting and deployment scripts.
+- Team G: add public export/private-field audit.

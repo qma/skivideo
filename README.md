@@ -11,7 +11,7 @@ npm start
 
 Then open `http://localhost:4173`.
 
-The design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](docs/DESIGN_AND_IMPLEMENTATION_PLAN.md).
+The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](docs/DESIGN_AND_IMPLEMENTATION_PLAN.md). The publishing, admin, auth, and multi-team roadmap lives in [docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md](docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md).
 
 ## Current Capabilities
 
