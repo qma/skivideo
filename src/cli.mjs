@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import { loadConfig, publicConfig } from "./config.mjs";
-import { JsonStore } from "./lib/fsStore.mjs";
+import { auditPublicLeanStore, JsonStore } from "./lib/fsStore.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
@@ -39,6 +39,8 @@ async function main(cmd, args) {
   if (cmd === "relabel-folder") return relabelFolderCommand(args);
   if (cmd === "process-video") return processSingleVideo(args[0]);
   if (cmd === "export-lean") return printJson(await store.exportLean());
+  if (cmd === "export-public") return exportPublic();
+  if (cmd === "audit-public-export") return auditPublicExport(args[0]);
   if (cmd === "audit-media-links") return auditMediaLinks(args);
   if (cmd === "sync-metadata") return printJson(await syncMetadataBackend(config, await store.read()));
   if (cmd === "search") return search(args.join(" "));
@@ -210,6 +212,24 @@ async function search(query) {
   printJson(results);
 }
 
+async function exportPublic() {
+  const result = await store.exportPublicLean();
+  if (!result.audit.ok) {
+    throw new Error(`Public export audit failed: ${result.audit.findings.join(", ")}`);
+  }
+  return printJson({
+    exportPath: result.exportPath,
+    audit: result.audit
+  });
+}
+
+async function auditPublicExport(filePath = "data/exports/public/lean-index.json") {
+  const lean = JSON.parse(await fs.readFile(filePath, "utf8"));
+  const audit = auditPublicLeanStore(lean);
+  printJson({ filePath, ...audit });
+  if (!audit.ok) process.exitCode = 1;
+}
+
 async function processSingleVideo(videoId) {
   if (!videoId) throw new Error("Video id is required.");
   const state = await store.read();
@@ -253,6 +273,8 @@ Commands:
   relabel-folder <folderId>
   process-video <videoId>
   export-lean
+  export-public
+  audit-public-export [path]
   audit-media-links [--all]
   sync-metadata
   search <query>

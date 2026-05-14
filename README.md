@@ -11,7 +11,7 @@ npm start
 
 Then open `http://localhost:4173`.
 
-The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](docs/DESIGN_AND_IMPLEMENTATION_PLAN.md). The publishing, admin, auth, and multi-team roadmap lives in [docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md](docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md).
+The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](docs/DESIGN_AND_IMPLEMENTATION_PLAN.md). The publishing, admin, auth, and multi-team roadmap lives in [docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md](docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md). The Phase 1 static public export and deployment guide lives in [docs/PHASE1_STATIC_PUBLIC_EXPORT.md](docs/PHASE1_STATIC_PUBLIC_EXPORT.md).
 
 ## Current Capabilities
 
@@ -38,6 +38,7 @@ The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_
 - Jobs are color-coded by status and each job has an Inspect link backed by `/api/job`, with persisted progress logs available during and after processing.
 - Optional Firestore metadata sync through Firebase service-account credentials.
 - App playback links in search results. Local videos use `/media/:videoId`; non-local videos link directly to the SharePoint source URL so the app server does not proxy video bytes.
+- Static read-only Next.js public app in `apps/public-next/`, generated from an audited public export with no local media paths, download URLs, credentials, or job history.
 
 ## Useful Commands
 
@@ -61,6 +62,11 @@ npm run cli -- process-folder <folderId> --parallel 4 --reprocess
 npm run cli -- relabel-folder <folderId>
 npm run cli -- process-video <videoId>
 npm run cli -- export-lean
+npm run cli -- export-public
+npm run public:export
+npm run public:audit
+npm run public:build
+npm run public:dev
 npm run cli -- audit-media-links
 npm run cli -- sync-metadata
 npm run cli -- search "Jane"
@@ -78,7 +84,9 @@ Use `prepare-folder` in low-data mode. It is the repeatable, codified event-prep
 - `data/media/`: mirrored videos, excluded from git.
 - `data/audio/`: extracted or downloaded audio, excluded from git.
 - `data/transcripts/`: generated transcripts, excluded from git.
-- `data/exports/lean-index.json`: publishable metadata export.
+- `data/exports/lean-index.json`: internal lean metadata export.
+- `data/exports/public/lean-index.json`: audited public metadata export for static publishing.
+- `apps/public-next/out/`: generated static public app for Vercel, Firebase Hosting, Cloudflare Pages, or any static host.
 
 The web app no longer loads `data/index/store.json` wholesale at startup. Folder cards are backed by a compact summary endpoint, while event video rows are fetched only when an event is opened.
 
@@ -86,7 +94,7 @@ The web app no longer loads `data/index/store.json` wholesale at startup. Folder
 
 The authoritative local working store is `data/index/store.json`. It keeps folder, event, video, transcript references, athlete labels, processing jobs, and race assets together so local processing can resume incrementally.
 
-For a hosted/search-only app, use `npm run cli -- export-lean` to produce `data/exports/lean-index.json`. This lean export keeps metadata and SharePoint playback links, but not hosted media.
+For a hosted/search-only app, use `npm run public:build`. This runs the public export audit, copies the sanitized metadata into the Next.js public app, and builds static HTML/CSS/JS into `apps/public-next/out/`. This public export keeps metadata and SharePoint playback links, but not hosted media or local worker paths.
 
 Firebase Firestore sync is implemented as an optional backend:
 
@@ -101,9 +109,11 @@ The sync writes prefixed Firestore collections for folders, videos, events, jobs
 
 ## Deployment Notes
 
-The backend is an Express app. That works directly on server runtimes such as Cloud Run, Render, Fly, Railway, or any container host. For Vercel, deploy the Express app through a serverless function or move the route handlers into Vercel API routes. For Firebase, use Firebase Hosting rewrites to Cloud Functions or Cloud Run; Firebase Hosting alone is static and cannot run the API.
+Phase 1 public publishing uses the static Next.js app in `apps/public-next/`. Build it with `npm run public:build` and deploy `apps/public-next/out/`. Detailed Vercel, Firebase Hosting, and Cloudflare Pages instructions are in [docs/PHASE1_STATIC_PUBLIC_EXPORT.md](docs/PHASE1_STATIC_PUBLIC_EXPORT.md).
 
-The publishable version should avoid storing videos. Use Firestore or `data/exports/lean-index.json` for metadata/search. Playback can either link to SharePoint source URLs or use an authenticated/server-side proxy endpoint when public SharePoint folder links do not produce stable anonymous per-file URLs.
+The backend/admin app is still an Express app. That works directly on server runtimes such as Cloud Run, Render, Fly, Railway, or any container host. For Vercel, deploy the Express app through a serverless function or move the route handlers into Vercel API routes. For Firebase, use Firebase Hosting rewrites to Cloud Functions or Cloud Run; Firebase Hosting alone is static and cannot run the API.
+
+The publishable version should avoid storing videos. Use Firestore or `data/exports/public/lean-index.json` for metadata/search. Playback can either link to SharePoint source URLs or use an authenticated/server-side proxy endpoint when public SharePoint folder links do not produce stable anonymous per-file URLs.
 
 ## Credential Notes
 

@@ -172,6 +172,14 @@ export class JsonStore {
     return { exportPath, lean };
   }
 
+  async exportPublicLean() {
+    const store = await this.read();
+    const lean = buildPublicLeanStore(store);
+    const exportPath = path.join(this.config.exportDir, "public", "lean-index.json");
+    await writeJsonAtomic(exportPath, lean);
+    return { exportPath, lean, audit: auditPublicLeanStore(lean) };
+  }
+
   async mutate(fn) {
     const operation = this.mutationQueue.then(async () => {
       const store = await this.read();
@@ -233,6 +241,217 @@ export function buildLeanStore(store) {
       athleteLabels: video.athleteLabels || [],
       processing: video.processing || {}
     }))
+  };
+}
+
+export function buildPublicLeanStore(store) {
+  const publishableStatuses = new Set(["indexed", "needs_review"]);
+  const folders = store.folders || [];
+  const videos = (store.videos || [])
+    .filter((video) => publishableStatuses.has(video.processing?.status))
+    .filter((video) => video.sharepointUrl)
+    .map(sanitizePublicVideo);
+  const folderStats = new Map();
+  for (const video of videos) {
+    const current = folderStats.get(video.folderId) || {
+      publishedVideos: 0,
+      indexedVideos: 0,
+      reviewVideos: 0,
+      labeledVideos: 0
+    };
+    current.publishedVideos += 1;
+    if (video.processing.status === "indexed") current.indexedVideos += 1;
+    if (video.processing.status === "needs_review") current.reviewVideos += 1;
+    if (video.athleteLabels.length) current.labeledVideos += 1;
+    folderStats.set(video.folderId, current);
+  }
+  return {
+    schema: "ski-video-public-index",
+    version: 1,
+    exportedAt: nowIso(),
+    source: {
+      mode: "static_public_export",
+      playbackPolicy: "direct_source_links",
+      mediaHosted: false
+    },
+    teams: [
+      {
+        id: "team_tpt_u14_2025_2026",
+        name: "TPT U14",
+        orgName: "Palisades Tahoe",
+        season: "2025-2026",
+        aliases: ["TPT", "TPTA", "Palisades Tahoe"]
+      }
+    ],
+    folders: folders
+      .map((folder) => sanitizePublicFolder(folder, folderStats.get(folder.id)))
+      .sort((a, b) => String(a.eventDate || a.name).localeCompare(String(b.eventDate || b.name))),
+    videos,
+    events: (store.events || []).map(sanitizePublicEvent)
+  };
+}
+
+export function auditPublicLeanStore(lean) {
+  const raw = JSON.stringify(lean);
+  const blockedPatterns = [
+    { name: "download_url", pattern: /"downloadUrl"\s*:/i },
+    { name: "local_path_key", pattern: /"local(Path|VideoPath|AudioPath)"\s*:/i },
+    { name: "absolute_user_path", pattern: /\/Users\// },
+    { name: "local_data_path", pattern: /data\/(media|audio|transcripts|models|raw|index)\// },
+    { name: "server_relative_url", pattern: /"serverRelativeUrl"\s*:/i },
+    { name: "job_history", pattern: /"jobs"\s*:/i },
+    { name: "credential_like_key", pattern: /"(token|secret|cookie|authorization)[^"]*"\s*:/i }
+  ];
+  const findings = blockedPatterns
+    .filter((check) => check.pattern.test(raw))
+    .map((check) => check.name);
+  return {
+    ok: findings.length === 0,
+    findings,
+    folders: lean.folders?.length || 0,
+    videos: lean.videos?.length || 0,
+    events: lean.events?.length || 0,
+    bytes: Buffer.byteLength(raw)
+  };
+}
+
+function sanitizePublicFolder(folder, stats = {}) {
+  return {
+    id: folder.id,
+    teamId: "team_tpt_u14_2025_2026",
+    name: folder.name || "",
+    source: folder.source || "",
+    sharepointUrl: folder.sharepointUrl || "",
+    itemCount: folder.itemCount || 0,
+    timeCreated: folder.timeCreated || "",
+    timeLastModified: folder.timeLastModified || "",
+    eventDate: folder.eventMatch?.date || "",
+    eventMatch: sanitizePublicEventMatch(folder.eventMatch),
+    raceAssets: (folder.raceAssets || []).map(sanitizePublicRaceAsset),
+    rosterSummary: summarizeRoster(folder.candidateRoster || []),
+    stats: {
+      publishedVideos: stats.publishedVideos || 0,
+      indexedVideos: stats.indexedVideos || 0,
+      reviewVideos: stats.reviewVideos || 0,
+      labeledVideos: stats.labeledVideos || 0
+    }
+  };
+}
+
+function sanitizePublicVideo(video) {
+  return {
+    id: video.id,
+    teamId: "team_tpt_u14_2025_2026",
+    folderId: video.folderId,
+    filename: video.filename || "",
+    sizeBytes: video.sizeBytes || 0,
+    mimeType: video.mimeType || "",
+    sharepointUrl: video.sharepointUrl || "",
+    playbackUrl: video.sharepointUrl || "",
+    timeCreated: video.timeCreated || "",
+    timeLastModified: video.timeLastModified || "",
+    transcript: sanitizePublicTranscript(video.transcript),
+    transcriptRef: sanitizePublicTranscriptRef(video.transcriptRef),
+    athleteLabels: (video.athleteLabels || []).map(sanitizePublicLabel),
+    processing: {
+      status: video.processing?.status || "pending",
+      processedAt: video.processing?.processedAt || "",
+      reviewedAt: video.processing?.reviewedAt || ""
+    }
+  };
+}
+
+function sanitizePublicEvent(event) {
+  return {
+    id: event.id || "",
+    date: event.date || "",
+    name: event.name || "",
+    venue: event.venue || "",
+    discipline: event.discipline || "",
+    sourceUrl: event.sourceUrl || ""
+  };
+}
+
+function sanitizePublicEventMatch(eventMatch = {}) {
+  return {
+    canonicalName: eventMatch.canonicalName || "",
+    date: eventMatch.date || "",
+    venue: eventMatch.venue || "",
+    discipline: eventMatch.discipline || "",
+    confidence: eventMatch.confidence || 0,
+    reasons: eventMatch.reasons || [],
+    sources: eventMatch.sources || [],
+    liveTimingMatch: sanitizePublicLiveTimingMatch(eventMatch.liveTimingMatch),
+    liveTimingMatches: (eventMatch.liveTimingMatches || []).map(sanitizePublicLiveTimingMatch),
+    liveTimingCorrelation: eventMatch.liveTimingCorrelation ? {
+      method: eventMatch.liveTimingCorrelation.method || "",
+      query: eventMatch.liveTimingCorrelation.query || "",
+      matchedAt: eventMatch.liveTimingCorrelation.matchedAt || "",
+      matchCount: eventMatch.liveTimingCorrelation.matchCount || 0
+    } : null
+  };
+}
+
+function sanitizePublicLiveTimingMatch(match) {
+  if (!match) return null;
+  return {
+    raceId: match.raceId || match.id || "",
+    name: match.name || "",
+    date: match.date || "",
+    venue: match.venue || "",
+    discipline: match.discipline || "",
+    gender: match.gender || "",
+    sourceUrl: match.sourceUrl || "",
+    score: match.score || 0
+  };
+}
+
+function sanitizePublicRaceAsset(asset) {
+  return {
+    type: asset.type || "",
+    label: asset.label || "",
+    sourceUrl: asset.sourceUrl || "",
+    raceId: asset.raceId || ""
+  };
+}
+
+function sanitizePublicTranscript(transcript = {}) {
+  return {
+    source: transcript.source || "unavailable",
+    text: snippet(transcript.text, 320)
+  };
+}
+
+function sanitizePublicTranscriptRef(ref = {}) {
+  return {
+    source: ref.source || "unavailable",
+    textLength: ref.textLength || 0,
+    segmentCount: ref.segmentCount || 0,
+    promptEnabled: Boolean(ref.prompt)
+  };
+}
+
+function sanitizePublicLabel(label = {}) {
+  return {
+    name: label.name || "",
+    confidence: label.confidence || 0,
+    source: label.source || "",
+    evidence: snippet(label.evidence, 180),
+    matchedRoster: Boolean(label.matchedRoster),
+    methodVersion: label.methodVersion || ""
+  };
+}
+
+function summarizeRoster(roster) {
+  const teams = new Map();
+  for (const racer of roster) {
+    const key = racer.team || "Unknown";
+    teams.set(key, (teams.get(key) || 0) + 1);
+  }
+  return {
+    racers: roster.length,
+    tptRacers: roster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
+    teams: [...teams.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([team, count]) => ({ team, count }))
   };
 }
 

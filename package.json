@@ -7,12 +7,19 @@
     "start": "node src/server.mjs",
     "dev": "node src/server.mjs",
     "cli": "node src/cli.mjs",
-    "smoke": "node src/smoke.mjs"
+    "smoke": "node src/smoke.mjs",
+    "public:export": "node src/cli.mjs export-public && node scripts/prepare-public-next.mjs",
+    "public:audit": "node src/cli.mjs audit-public-export data/exports/public/lean-index.json",
+    "public:build": "npm run public:export && next build apps/public-next",
+    "public:dev": "npm run public:export && next dev apps/public-next -p 4174"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   }
 }

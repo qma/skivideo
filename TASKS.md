@@ -2,7 +2,7 @@
 
 ## Current Focus
 
-- Coordinate multi-agent publishing roadmap work through `docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md`.
+- Select the first Phase 1 static host and deploy the generated public app when ready.
 
 ## Completed
 
@@ -105,16 +105,17 @@
 - [codex] Cleaned up the old SharePoint proxy server code path and documentation. Verified local media returns `200 video/mp4` from `/media`, dataless/non-local `/media` returns `302` to SharePoint, and search API marks `P1000316.MP4` as `localVideoPlayable: false` so the UI uses its direct SharePoint source URL.
 - Project instructions added to `GEMINI.md` (e.g., commit message prefixing).
 - [codex] Added `docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md` covering static public publishing, hosted admin architecture, auth phases, multi-team/source model, and work packages for agent teams A-G.
+- [codex] Executed Phase 1 static public export: added audited `export-public`/`audit-public-export` commands, a static Next.js read-only app in `apps/public-next/`, build scripts, and deployment docs for Vercel, Firebase Hosting, and Cloudflare Pages.
+- [codex] Verified `npm run public:audit`, `npm run public:build`, and a temporary static serve of `apps/public-next/out/`; `/` and `/data/lean-index.json` returned 200, and the exported JSON contains 57 folders, 757 videos, and no local/download/private fields.
 
 ## In Progress
 - None.
 
 ## Next
 
-- Team A: implement static lean public app/export hardening.
+- Team A: review and polish the static public app UX after a family-facing smoke test.
 - Team B: formalize Firestore schema and sync migrations.
 - Team C: implement simple admin password gate.
 - Team D: extract worker/job queue.
 - Team E: refactor SharePoint behind source adapter interface.
-- Team F: choose Phase 1 hosting and deployment scripts.
-- Team G: add public export/private-field audit.
+- Team F: choose the first production static host and wire CI/CD around `npm run public:build`.
