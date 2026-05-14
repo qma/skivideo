@@ -46,8 +46,8 @@ export async function buildRestFolderManifest(config, folderServerRelativeUrl, r
   return { folders: [folderRecord], videos };
 }
 
-export async function pickOldestFolder(config) {
-  const folders = await listRootEventFoldersRest(config);
+export async function pickOldestFolder(config, rootUrl = config.sharepointRootUrl) {
+  const folders = await listRootEventFoldersRest(config, rootUrl);
   return folders
     .slice()
     .sort((a, b) => String(a.timeCreated).localeCompare(String(b.timeCreated)))[0];

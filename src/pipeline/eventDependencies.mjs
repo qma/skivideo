@@ -26,7 +26,8 @@ export async function ensureFolderManifest(config, store, folderId) {
     };
   }
 
-  const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl);
+  const rootUrl = await lookupSharePointRootUrl(config, store, folder);
+  const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl, rootUrl);
   await store.upsertFolders(manifest.folders || []);
   await store.upsertVideos(manifest.videos || []);
   return {
@@ -112,4 +113,15 @@ function liveTimingPatch(folder, correlation) {
       sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
     }
   };
+}
+
+async function lookupSharePointRootUrl(config, store, folder) {
+  if (config.sharepointRootUrl && !config.sharepointRootUrl.includes("<tenant>")) {
+    return config.sharepointRootUrl;
+  }
+  const state = await store.read();
+  const teamId = folder.teamId || state.teams[0]?.id;
+  const team = state.teams.find((t) => t.id === teamId);
+  if (team?.sharepointRootUrl) return team.sharepointRootUrl;
+  return config.sharepointRootUrl;
 }

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const defaultSharePointRootUrl = "https://alterramtnco.sharepoint.com/:f:/s/TeamPalisadesTahoeShared/IgCyzteAf9SbQ4aGoEO1VqmZAWP2Px2acNgFwKn3reHavTs?e=FYefRv";
+const defaultSharePointRootUrl = "https://<tenant>.sharepoint.com/:f:/s/<site>/<folder-id>";
 
 export function loadConfig() {
   loadDotEnv(path.join(rootDir, ".env"));

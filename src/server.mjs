@@ -63,8 +63,9 @@ app.post("/api/list-sharepoint", asyncRoute(async () => {
   await store.upsertFolders(folders);
   return { ok: true, folders };
 }));
-app.post("/api/list-sharepoint-rest", asyncRoute(async () => {
-  const folders = await listRootEventFoldersRest(config);
+app.post("/api/list-sharepoint-rest", asyncRoute(async (req) => {
+  const rootUrl = await lookupSharePointRootUrl(config, store, req.body);
+  const folders = await listRootEventFoldersRest(config, rootUrl);
   await store.upsertFolders(folders);
   return { ok: true, folders };
 }));
@@ -75,14 +76,16 @@ app.post("/api/manifest-sharepoint", asyncRoute(async (req) => {
   return { ok: true, manifest };
 }));
 app.post("/api/manifest-sharepoint-rest", asyncRoute(async (req) => {
-  const manifest = await buildRestFolderManifest(config, req.body.serverRelativeUrl);
+  const rootUrl = await lookupSharePointRootUrl(config, store, req.body);
+  const manifest = await buildRestFolderManifest(config, req.body.serverRelativeUrl, rootUrl);
   await store.upsertFolders(manifest.folders || []);
   await store.upsertVideos(manifest.videos || []);
   return { ok: true, manifest };
 }));
-app.post("/api/ingest-oldest-sharepoint-folder", asyncRoute(async () => {
-  const folder = await pickOldestFolder(config);
-  const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl);
+app.post("/api/ingest-oldest-sharepoint-folder", asyncRoute(async (req) => {
+  const rootUrl = await lookupSharePointRootUrl(config, store, req.body);
+  const folder = await pickOldestFolder(config, rootUrl);
+  const manifest = await buildRestFolderManifest(config, folder.serverRelativeUrl, rootUrl);
   await store.upsertFolders(manifest.folders || []);
   await store.upsertVideos(manifest.videos || []);
   return { ok: true, selectedFolder: manifest.folders[0], videos: manifest.videos.length };
@@ -434,4 +437,15 @@ function countStore(state) {
     events: state.events?.length || 0,
     videos: state.videos?.length || 0
   };
+}
+
+async function lookupSharePointRootUrl(config, store, input = {}) {
+  if (config.sharepointRootUrl && !config.sharepointRootUrl.includes("<tenant>")) {
+    return config.sharepointRootUrl;
+  }
+  const state = await store.read();
+  const teamId = input.teamId || state.teams[0]?.id;
+  const team = state.teams.find((t) => t.id === teamId);
+  if (team?.sharepointRootUrl) return team.sharepointRootUrl;
+  return config.sharepointRootUrl;
 }

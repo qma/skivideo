@@ -8,7 +8,8 @@ const emptyStore = {
   folders: [],
   videos: [],
   events: [],
-  jobs: []
+  jobs: [],
+  teams: []
 };
 
 export class JsonStore {
@@ -93,6 +94,15 @@ export class JsonStore {
       const byKey = new Map(store.events.map((event) => [event.id || `${event.date}:${event.name}`, event]));
       for (const event of events) byKey.set(event.id || `${event.date}:${event.name}`, event);
       store.events = [...byKey.values()];
+      return store;
+    });
+  }
+
+  async upsertTeams(teams) {
+    return this.mutate((store) => {
+      const byId = new Map(store.teams.map((team) => [team.id, team]));
+      for (const team of teams) byId.set(team.id, { ...(byId.get(team.id) || {}), ...team });
+      store.teams = [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
       return store;
     });
   }
@@ -274,15 +284,7 @@ export function buildPublicLeanStore(store) {
       playbackPolicy: "direct_source_links",
       mediaHosted: false
     },
-    teams: [
-      {
-        id: "team_tpt_u14_2025_2026",
-        name: "TPT U14",
-        orgName: "Palisades Tahoe",
-        season: "2025-2026",
-        aliases: ["TPT", "TPTA", "Palisades Tahoe"]
-      }
-    ],
+    teams: store.teams || [],
     folders: folders
       .map((folder) => sanitizePublicFolder(folder, folderStats.get(folder.id)))
       .sort((a, b) => String(a.eventDate || a.name).localeCompare(String(b.eventDate || b.name))),
@@ -318,7 +320,7 @@ export function auditPublicLeanStore(lean) {
 function sanitizePublicFolder(folder, stats = {}) {
   return {
     id: folder.id,
-    teamId: "team_tpt_u14_2025_2026",
+    teamId: folder.teamId || "team_tpt_u14_2025_2026",
     name: folder.name || "",
     source: folder.source || "",
     sharepointUrl: folder.sharepointUrl || "",
@@ -341,7 +343,7 @@ function sanitizePublicFolder(folder, stats = {}) {
 function sanitizePublicVideo(video) {
   return {
     id: video.id,
-    teamId: "team_tpt_u14_2025_2026",
+    teamId: video.teamId || "team_tpt_u14_2025_2026",
     folderId: video.folderId,
     filename: video.filename || "",
     sizeBytes: video.sizeBytes || 0,

@@ -77,12 +77,14 @@ export async function processFolder(config, store, folderId, options = {}) {
     return next;
   };
 
+  const rootUrl = await lookupSharePointRootUrl(config, store, folder);
+
   async function processNext() {
     const video = videos[cursor];
     cursor += 1;
     if (!video) return;
     try {
-      const processed = await processVideo(config, video, folder, options);
+      const processed = await processVideo(config, video, folder, options, rootUrl);
       await enqueueWrite(() => store.updateVideo(video.id, processed));
       if (processed.processing.status === "indexed") indexed += 1;
       else needsReview += 1;
@@ -143,7 +145,7 @@ export async function relabelFolder(config, store, folderId) {
   return { folderId, videos: videos.length, indexed, needsReview };
 }
 
-export async function processVideo(config, video, folder, options = {}) {
+export async function processVideo(config, video, folder, options = {}, rootUrl = config.sharepointRootUrl) {
   const next = structuredClone(video);
   const errors = [];
   const forceTranscribe = Boolean(options.forceTranscribe);
@@ -167,7 +169,7 @@ export async function processVideo(config, video, folder, options = {}) {
 
   if (!forceTranscribe && next.transcript?.source === "microsoft_transcript" && !next.transcript.text) {
     try {
-      next.transcript = await cacheTranscript(next, config);
+      next.transcript = await cacheTranscript(next, config, rootUrl);
     } catch (error) {
       errors.push(`Transcript cache failed: ${error.message}`);
     }
@@ -191,7 +193,7 @@ export async function processVideo(config, video, folder, options = {}) {
   if (((forceTranscribe && !transcribedThisRun) || !next.transcript?.text) && !next.localVideoPath && next.downloadUrl) {
     if (allowDownload) {
       try {
-        next.localVideoPath = await mirrorVideo(next, folder, config);
+        next.localVideoPath = await mirrorVideo(next, folder, config, rootUrl);
         next.localAudioPath = await extractAudio(next.localVideoPath, config);
         next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
         transcribedThisRun = true;
@@ -227,4 +229,15 @@ export async function processVideo(config, video, folder, options = {}) {
     processedAt: nowIso()
   };
   return next;
+}
+
+async function lookupSharePointRootUrl(config, store, folder) {
+  if (config.sharepointRootUrl && !config.sharepointRootUrl.includes("<tenant>")) {
+    return config.sharepointRootUrl;
+  }
+  const state = await store.read();
+  const teamId = folder.teamId || state.teams[0]?.id;
+  const team = state.teams.find((t) => t.id === teamId);
+  if (team?.sharepointRootUrl) return team.sharepointRootUrl;
+  return config.sharepointRootUrl;
 }

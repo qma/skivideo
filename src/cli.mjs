@@ -29,7 +29,7 @@ async function main(cmd, args) {
   if (cmd === "fetch-live-timing-race") return fetchLiveTimingRace(args[0]);
   if (cmd === "correlate-folder-live-timing") return correlateFolderLiveTiming(args[0]);
   if (cmd === "list-sharepoint") return listSharePoint();
-  if (cmd === "list-sharepoint-rest") return listSharePointRest();
+  if (cmd === "list-sharepoint-rest") return listSharePointRest(args);
   if (cmd === "manifest-sharepoint") return manifestSharePoint(args[0]);
   if (cmd === "manifest-sharepoint-rest") return manifestSharePointRest(args.join(" "));
   if (cmd === "ingest-oldest-sharepoint-folder") return ingestOldestSharePointFolder();
@@ -45,7 +45,17 @@ async function main(cmd, args) {
   if (cmd === "sync-metadata") return printJson(await syncMetadataBackend(config, await store.read()));
   if (cmd === "search") return search(args.join(" "));
   if (cmd === "backends") return printJson(await detectTranscriptionBackends(config));
+  if (cmd === "upsert-team") return upsertTeam(args[0]);
+  if (cmd === "list-teams") return printJson((await store.read()).teams || []);
   throw new Error(`Unknown command: ${cmd}`);
+}
+
+async function upsertTeam(json) {
+  if (!json) throw new Error("Team JSON string is required.");
+  const team = JSON.parse(json);
+  if (!team.id) throw new Error("Team id is required.");
+  await store.upsertTeams([team]);
+  printJson({ ok: true, teamId: team.id });
 }
 
 async function ingestManifest(filePath) {
@@ -159,8 +169,15 @@ async function listSharePoint() {
   printJson({ folders });
 }
 
-async function listSharePointRest() {
-  const folders = await listRootEventFoldersRest(config);
+async function listSharePointRest(args = []) {
+  const { options } = parseArgs(args);
+  let rootUrl = options.sharepointUrl || config.sharepointRootUrl;
+  if (options.teamId) {
+    const state = await store.read();
+    const team = state.teams.find((t) => t.id === options.teamId);
+    if (team?.sharepointRootUrl) rootUrl = team.sharepointRootUrl;
+  }
+  const folders = await listRootEventFoldersRest(config, rootUrl);
   await store.upsertFolders(folders);
   printJson({ folders });
 }
@@ -372,6 +389,16 @@ function parseArgs(args) {
       i += 1;
     } else if (arg.startsWith("--transcription-prompt-max-names=")) {
       options.transcriptionPromptMaxNames = Number(arg.slice("--transcription-prompt-max-names=".length));
+    } else if (arg === "--team-id" || arg === "-t") {
+      options.teamId = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith("--team-id=")) {
+      options.teamId = arg.slice("--team-id=".length);
+    } else if (arg === "--sharepoint-url" || arg === "-s") {
+      options.sharepointUrl = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith("--sharepoint-url=")) {
+      options.sharepointUrl = arg.slice("--sharepoint-url=".length);
     } else {
       positionals.push(arg);
     }

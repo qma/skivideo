@@ -7,7 +7,8 @@ export async function prepareEventFolder(config, store, input = {}) {
   let manifestSummary = null;
 
   if (input.serverRelativeUrl) {
-    const manifest = await buildRestFolderManifest(config, input.serverRelativeUrl);
+    const rootUrl = await lookupSharePointRootUrl(config, store, input);
+    const manifest = await buildRestFolderManifest(config, input.serverRelativeUrl, rootUrl);
     await store.upsertFolders(manifest.folders || []);
     await store.upsertVideos(manifest.videos || []);
     folderId = manifest.folders?.[0]?.id || folderId;
@@ -39,4 +40,15 @@ export async function prepareEventFolder(config, store, input = {}) {
     liveTimingSkipped: Boolean(correlation.skipped),
     relabel
   };
+}
+
+async function lookupSharePointRootUrl(config, store, input) {
+  if (config.sharepointRootUrl && !config.sharepointRootUrl.includes("<tenant>")) {
+    return config.sharepointRootUrl;
+  }
+  const state = await store.read();
+  const teamId = input.teamId || state.teams[0]?.id;
+  const team = state.teams.find((t) => t.id === teamId);
+  if (team?.sharepointRootUrl) return team.sharepointRootUrl;
+  return config.sharepointRootUrl;
 }

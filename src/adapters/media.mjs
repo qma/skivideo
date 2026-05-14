@@ -31,13 +31,13 @@ export async function downloadToCache(url, targetPath, options = {}) {
   }
 }
 
-export async function cacheTranscript(video, config) {
+export async function cacheTranscript(video, config, rootUrl = config.sharepointRootUrl) {
   const source = video.transcript || {};
   if (source.text) return source;
   if (!(source.downloadUrl || source.sourceUrl)) return source;
   const url = source.downloadUrl || source.sourceUrl;
   const target = path.join(config.transcriptDir, `${slugify(video.id)}.txt`);
-  const downloaded = await downloadToCache(url, target, await sharePointDownloadOptions(config, url));
+  const downloaded = await downloadToCache(url, target, await sharePointDownloadOptions(rootUrl, url));
   const text = await fs.readFile(downloaded.path, "utf8");
   return {
     ...source,
@@ -46,12 +46,12 @@ export async function cacheTranscript(video, config) {
   };
 }
 
-export async function mirrorVideo(video, folder, config) {
+export async function mirrorVideo(video, folder, config, rootUrl = config.sharepointRootUrl) {
   if (video.localVideoPath && await usableCachedFile(video.localVideoPath)) return video.localVideoPath;
   if (!video.downloadUrl) throw new Error(`No download URL for ${video.filename}`);
   const folderSlug = slugify(folder?.name || video.folderId);
   const target = path.join(config.mediaDir, folderSlug, video.filename);
-  const downloaded = await downloadToCache(video.downloadUrl, target, await sharePointDownloadOptions(config, video.downloadUrl));
+  const downloaded = await downloadToCache(video.downloadUrl, target, await sharePointDownloadOptions(rootUrl, video.downloadUrl));
   return downloaded.path;
 }
 
@@ -109,9 +109,10 @@ function run(command, args) {
   });
 }
 
-async function sharePointDownloadOptions(config, url) {
+async function sharePointDownloadOptions(rootUrl, url) {
   if (!/sharepoint\.com/i.test(url)) return {};
-  const session = await establishSharePointSession(config.sharepointRootUrl);
+  if (!rootUrl) return {};
+  const session = await establishSharePointSession(rootUrl);
   return { cookie: session.cookies };
 }
 
