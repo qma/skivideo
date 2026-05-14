@@ -225,16 +225,20 @@ async function reviewVideo(body) {
 async function search(query) {
   const state = await store.read();
   const needle = normalizeText(query);
-  const results = state.videos
+  const results = await Promise.all(state.videos
     .filter((video) => !needle || normalizeText([
       video.filename,
       video.transcript?.text,
       ...(video.athleteLabels || []).map((label) => label.name)
     ].join(" ")).includes(needle))
-    .map((video) => {
+    .map(async (video) => {
       const folder = state.folders.find((item) => item.id === video.folderId);
-      return { ...video, folder };
-    });
+      return {
+        ...video,
+        folder,
+        localVideoPlayable: Boolean(video.localVideoPath && await readableLocalMedia(video.localVideoPath))
+      };
+    }));
   return { query, results };
 }
 
@@ -377,7 +381,8 @@ async function serveMedia(req, res, videoId) {
   if (!video) return res.status(404).json({ error: "Video not found" });
   const localMedia = video.localVideoPath ? await readableLocalMedia(video.localVideoPath) : null;
   if (!localMedia) {
-    if (video.downloadUrl) return proxySharePointMedia(req, res, video);
+    // Redirect to SharePoint original source to avoid server bandwidth bloat from proxying.
+    // This may prompt for login in the browser if the user does not have a session.
     return res.redirect(302, video.sharepointUrl);
   }
   const range = req.headers.range;
@@ -412,34 +417,6 @@ async function readableLocalMedia(localPath) {
   } catch {
     return null;
   }
-}
-
-async function proxySharePointMedia(req, res, video) {
-  const session = await sharedSharePointSession();
-  const headers = {
-    cookie: session.cookies
-  };
-  if (req.headers.range) headers.range = req.headers.range;
-  const response = await fetch(video.downloadUrl, { headers });
-  if (!response.ok) {
-    throw new Error(`SharePoint media proxy failed ${response.status}: ${await response.text()}`);
-  }
-  const passthroughHeaders = {};
-  for (const key of ["content-length", "content-range", "content-type", "accept-ranges"]) {
-    const value = response.headers.get(key);
-    if (value) passthroughHeaders[key] = value;
-  }
-  if (!passthroughHeaders["content-type"] || passthroughHeaders["content-type"] === "application/octet-stream") {
-    passthroughHeaders["content-type"] = video.mimeType || contentTypeForFilename(video.filename);
-  }
-  res.writeHead(response.status, passthroughHeaders);
-  if (req.method === "HEAD") return res.end();
-  return pipeMediaStream(Readable.fromWeb(response.body), res);
-}
-
-async function sharedSharePointSession() {
-  if (!sharePointSessionPromise) sharePointSessionPromise = establishSharePointSession(config.sharepointRootUrl);
-  return sharePointSessionPromise;
 }
 
 function pipeMediaStream(stream, res) {

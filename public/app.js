@@ -577,7 +577,10 @@ function normalizeClientText(value) {
 }
 
 function playbackHref(video) {
-  return `/media/${encodeURIComponent(video.id)}`;
+  if (video.localVideoPlayable) {
+    return `/media/${encodeURIComponent(video.id)}`;
+  }
+  return video.sharepointUrl;
 }
 
 function actionHref(actionName, folderId) {

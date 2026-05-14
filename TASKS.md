@@ -101,9 +101,9 @@
 - "Delete Folder" capability added to the web UI and backend for data management.
 - "Search Athletes" results enhanced with video previews, event dates, and larger transcript snippets.
 - Bulk review actions added to the event table ("Mark all as Indexed", "Clear all labels").
+- Optimizing `/media/:videoId` to avoid proxying SharePoint videos (use 302 redirect) to reduce bandwidth bloat.
 
 ## In Progress
-
 - Investigating potential UI improvements and data integrity checks.
 
 ## Next
