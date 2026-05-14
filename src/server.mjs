@@ -1,13 +1,12 @@
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
 import express from "express";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
-import { buildRestFolderManifest, establishSharePointSession, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
+import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
 import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
@@ -18,7 +17,6 @@ import { normalizeText } from "./lib/text.mjs";
 const config = loadConfig();
 const store = new JsonStore(config);
 await store.ensure();
-let sharePointSessionPromise = null;
 
 const app = express();
 
@@ -428,14 +426,6 @@ function pipeMediaStream(stream, res) {
     res.destroy();
   });
   return stream.pipe(res);
-}
-
-function contentTypeForFilename(filename) {
-  const value = String(filename || "").toLowerCase();
-  if (value.endsWith(".mov")) return "video/quicktime";
-  if (value.endsWith(".webm")) return "video/webm";
-  if (value.endsWith(".m4v")) return "video/x-m4v";
-  return "video/mp4";
 }
 
 function countStore(state) {

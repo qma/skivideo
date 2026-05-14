@@ -269,9 +269,8 @@ async function auditMediaLinks(args) {
     : state.videos.filter((video) => ["indexed", "needs_review", "failed"].includes(video.processing?.status));
   const rows = await Promise.all(videos.map(async (video) => {
     const local = await localMediaStatus(video.localVideoPath);
-    const fallback = Boolean(video.downloadUrl);
-    const sourceOnly = !fallback && Boolean(video.sharepointUrl);
-    const ok = local.readable || fallback || sourceOnly;
+    const sourceFallback = Boolean(video.sharepointUrl);
+    const ok = local.readable || sourceFallback;
     return {
       id: video.id,
       filename: video.filename,
@@ -279,13 +278,13 @@ async function auditMediaLinks(args) {
       processingStatus: video.processing?.status || "pending",
       ok,
       localStatus: local.status,
-      hasDownloadUrl: fallback,
+      hasDownloadUrl: Boolean(video.downloadUrl),
       hasSharepointUrl: Boolean(video.sharepointUrl),
-      playbackPath: `/media/${video.id}`
+      playbackPath: local.readable ? `/media/${video.id}` : video.sharepointUrl
     };
   }));
   const broken = rows.filter((row) => !row.ok);
-  const sourceOnly = rows.filter((row) => row.localStatus !== "readable" && !row.hasDownloadUrl && row.hasSharepointUrl);
+  const directSource = rows.filter((row) => row.localStatus !== "readable" && row.hasSharepointUrl);
   printJson({
     scope: options.all ? "all" : "processed",
     checked: rows.length,
@@ -293,10 +292,9 @@ async function auditMediaLinks(args) {
     broken: broken.length,
     readableLocal: rows.filter((row) => row.localStatus === "readable").length,
     datalessLocal: rows.filter((row) => row.localStatus === "dataless").length,
-    missingLocalWithFallback: rows.filter((row) => row.localStatus !== "readable" && row.hasDownloadUrl).length,
-    sourceOnlyFallback: sourceOnly.length,
+    directSharePointFallback: directSource.length,
     brokenRows: broken.slice(0, 50),
-    sourceOnlyRows: sourceOnly.slice(0, 20)
+    directSharePointRows: directSource.slice(0, 20)
   });
 }
 
