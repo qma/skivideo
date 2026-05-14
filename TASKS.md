@@ -2,7 +2,7 @@
 
 ## Current Focus
 
-- Select the first Phase 1 static host and deploy the generated public app when ready.
+- Execute the next publishing work package after selecting Vercel as the first Phase 1 static host.
 
 ## Completed
 
@@ -107,6 +107,9 @@
 - [codex] Added `docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md` covering static public publishing, hosted admin architecture, auth phases, multi-team/source model, and work packages for agent teams A-G.
 - [codex] Executed Phase 1 static public export: added audited `export-public`/`audit-public-export` commands, a static Next.js read-only app in `apps/public-next/`, build scripts, and deployment docs for Vercel, Firebase Hosting, and Cloudflare Pages.
 - [codex] Verified `npm run public:audit`, `npm run public:build`, and a temporary static serve of `apps/public-next/out/`; `/` and `/data/lean-index.json` returned 200, and the exported JSON contains 57 folders, 757 videos, and no local/download/private fields.
+- [codex] Selected Vercel as the first Phase 1 static host and added `vercel.json` plus `.vercelignore`.
+- [codex] Vercel config uses `npm ci`, `npm run public:build`, and `apps/public-next/out`; `.vercelignore` excludes local media, audio, transcripts, raw data, private index data, generated exports, model/tool caches, `.env`, and generated build outputs.
+- [codex] Re-verified public export and build after Vercel config: `npm run public:audit` passed with 57 folders and 757 videos; `npm run public:build` completed; a temporary static server returned `200` for `/` and `/data/lean-index.json`; browser title was `TPT U14 Video Index`.
 
 ## In Progress
 - None.
@@ -118,4 +121,4 @@
 - Team C: implement simple admin password gate.
 - Team D: extract worker/job queue.
 - Team E: refactor SharePoint behind source adapter interface.
-- Team F: choose the first production static host and wire CI/CD around `npm run public:build`.
+- Team F: wire CI/CD or hosted deploy credentials around the Vercel static build (`npm run public:build`).

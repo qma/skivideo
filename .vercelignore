@@ -1,0 +1,17 @@
+.env
+.venv/
+node_modules/
+*.log
+
+data/media/
+data/audio/
+data/transcripts/
+data/raw/
+data/index/
+data/exports/
+data/tools/
+data/models/
+
+apps/public-next/.next/
+apps/public-next/out/
+apps/public-next/public/data/

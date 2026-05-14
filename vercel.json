@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run public:build",
+  "outputDirectory": "apps/public-next/out",
+  "installCommand": "npm ci",
+  "framework": null
+}

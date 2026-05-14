@@ -75,13 +75,39 @@ The production artifact to deploy is:
 apps/public-next/out/
 ```
 
-## Vercel
+## Selected Phase 1 Host: Vercel
+
+Vercel is the first configured static host for Phase 1 because the public app is already a static Next export and can deploy `apps/public-next/out/` without running a media proxy or server runtime.
+
+Committed repo config:
+
+- `vercel.json`: runs `npm run public:build`, serves `apps/public-next/out`, and uses `npm ci`.
+- `.vercelignore`: excludes local media, audio, transcripts, raw source snapshots, private index data, generated exports, models, tool caches, `.env`, and build outputs from upload.
+
+Vercel CLI deploy path:
+
+```sh
+npm run public:audit
+npm run public:build
+npx vercel deploy --prod
+```
+
+Git-connected deploy settings should match:
+
+- Root Directory: repository root
+- Framework Preset: Other
+- Install Command: `npm ci`
+- Build Command: `npm run public:build`
+- Output Directory: `apps/public-next/out`
+- Node.js: 20 or newer
+
+## Vercel Reference
 
 Recommended static-only configuration:
 
 - Root Directory: repository root
 - Framework Preset: Other
-- Install Command: `npm install`
+- Install Command: `npm ci`
 - Build Command: `npm run public:build`
 - Output Directory: `apps/public-next/out`
 - Node.js: 20 or newer
