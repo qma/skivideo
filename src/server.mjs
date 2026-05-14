@@ -124,7 +124,19 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
   };
 }));
 app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId)));
+app.post("/api/delete-folder", asyncRoute(async (req) => {
+  console.log("Delete folder requested:", req.body.folderId);
+  if (!req.body.folderId) throw new Error("folderId is required.");
+  await store.removeFolder(req.body.folderId);
+  return { ok: true, folderId: req.body.folderId };
+}));
 app.post("/api/review-video", asyncRoute((req) => reviewVideo(req.body)));
+app.post("/api/bulk-review", asyncRoute(async (req) => {
+  if (!req.body.folderId) throw new Error("folderId is required.");
+  if (!["mark-indexed", "clear-labels"].includes(req.body.action)) throw new Error("Unsupported bulk action.");
+  await store.bulkReviewVideos(req.body.folderId, req.body.action);
+  return { ok: true, folderId: req.body.folderId, action: req.body.action };
+}));
 app.post("/api/export-lean", asyncRoute(async () => {
   const result = await store.exportLean();
   return { ok: true, exportPath: result.exportPath, counts: countStore(result.lean) };

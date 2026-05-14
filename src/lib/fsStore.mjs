@@ -70,6 +70,15 @@ export class JsonStore {
     });
   }
 
+  async removeFolder(folderId) {
+    return this.mutate((store) => {
+      store.folders = store.folders.filter((folder) => folder.id !== folderId);
+      store.videos = store.videos.filter((video) => video.folderId !== folderId);
+      store.jobs = store.jobs.filter((job) => job.folderId !== folderId);
+      return store;
+    });
+  }
+
   async upsertVideos(videos) {
     return this.mutate((store) => {
       const byId = new Map(store.videos.map((video) => [video.id, video]));
@@ -97,6 +106,38 @@ export class JsonStore {
 
   async updateVideoWith(fn) {
     return this.mutate((store) => fn(store) || store);
+  }
+
+  async bulkReviewVideos(folderId, action, labelName) {
+    return this.mutate((store) => {
+      const reviewedAt = nowIso();
+      store.videos = store.videos.map((video) => {
+        if (video.folderId !== folderId) return video;
+        if (action === "clear-labels") {
+          return {
+            ...video,
+            athleteLabels: [],
+            processing: {
+              ...(video.processing || {}),
+              status: "needs_review",
+              reviewedAt
+            }
+          };
+        }
+        if (action === "mark-indexed") {
+          return {
+            ...video,
+            processing: {
+              ...(video.processing || {}),
+              status: "indexed",
+              reviewedAt
+            }
+          };
+        }
+        return video;
+      });
+      return store;
+    });
   }
 
   async addJob(job) {

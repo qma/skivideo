@@ -2,7 +2,7 @@
 
 ## Current Focus
 
-- Execute queued tasks to completion, using this file as the resumable work ledger.
+- Handover completed. Researching next steps for the local-first web app and indexing pipeline.
 
 ## Completed
 
@@ -98,11 +98,15 @@
 - Hardened cache download writes: downloads now stream to a hidden temp file, validate non-empty/readable/non-dataless content and `content-length` when present, then atomically rename into the cache path.
 - `mirrorVideo` and `extractAudio` now re-create dataless or unreadable cached files instead of trusting an existing path.
 - Download validation test passed: a successful local test download was promoted, while a short/incomplete response left no target file and no temp file.
+- "Delete Folder" capability added to the web UI and backend for data management.
+- "Search Athletes" results enhanced with video previews, event dates, and larger transcript snippets.
+- Bulk review actions added to the event table ("Mark all as Indexed", "Clear all labels").
 
 ## In Progress
 
-- None.
+- Investigating potential UI improvements and data integrity checks.
 
 ## Next
 
-- None queued.
+- Add mobile-friendly responsive refinements to the event table.
+- Implement visual similarity propagation schema and basic UI placeholders.

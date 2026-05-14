@@ -17,7 +17,8 @@ const actionTips = {
   live: "Refresh Live-Timing race correlation, racer roster, and linked assets. Does not download media.",
   prepare: "Run View and Live dependencies if needed, then relabel from existing metadata/transcripts. Does not download media.",
   process: "Run View, Live, and Prepare dependencies if needed, then download/mirror videos, transcribe, label, and update the index with parallel 4.",
-  reprocess: "Force retranscription and relabeling from existing local media/audio only. Does not download missing media."
+  reprocess: "Force retranscription and relabeling from existing local media/audio only. Does not download missing media.",
+  delete: "Remove this folder and all its videos from the index. Does not delete local media files on disk."
 };
 
 const el = (id) => document.getElementById(id);
@@ -63,6 +64,8 @@ function bindActions() {
     state.eventConfidence = event.target.value;
     renderEventView();
   });
+  el("bulkMarkIndexed").addEventListener("click", () => bulkAction("mark-indexed"));
+  el("bulkClearLabels").addEventListener("click", () => bulkAction("clear-labels"));
   el("eventViewPanel").addEventListener("click", async (event) => {
     const save = event.target.closest("[data-manual-label]");
     const clear = event.target.closest("[data-clear-labels]");
@@ -148,6 +151,7 @@ function renderFolders() {
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("reprocess", folder.id))}" title="${escapeAttr(actionTips.reprocess)}" aria-label="${escapeAttr(actionTips.reprocess)}">Re-Process</a>
+          <a class="actionLink deleteActionLink" href="${escapeAttr(actionHref("delete", folder.id))}" title="${escapeAttr(actionTips.delete)}" aria-label="${escapeAttr(actionTips.delete)}">Delete</a>
         </div>
       </article>
     `;
@@ -320,20 +324,41 @@ async function renderSearch() {
   el("results").innerHTML = data.results.map((video) => {
     const labels = video.athleteLabels || [];
     const status = video.processing?.status || "pending";
+    const folder = video.folder || {};
+    const event = folder.eventMatch || {};
     return `
-      <article class="result">
-        <div class="resultHeader">
-          <div>
-            <strong>${escapeHtml(video.filename)}</strong>
-            <p>${escapeHtml(video.folder?.name || "")}</p>
+      <article class="result searchResult">
+        <div class="resultPreview">
+          <video
+            class="thumbVideo"
+            src="${escapeAttr(playbackHref(video))}"
+            controls
+            preload="metadata"
+            playsinline
+            title="${escapeAttr(video.localVideoPlayable ? "Local cached media" : "Source media fallback")}"></video>
+        </div>
+        <div class="resultContent">
+          <div class="resultHeader">
+            <div>
+              <strong>${escapeHtml(video.filename)}</strong>
+              <p>${escapeHtml(folder.name || "")} · ${escapeHtml(event.date || "")}</p>
+            </div>
+            <div class="resultActions">
+              <a class="actionLink" href="${escapeAttr(playbackHref(video))}" target="_blank" rel="noreferrer">Open Video</a>
+              <button class="subtleButton" onclick="openEvent('${escapeAttr(video.folderId)}')">View Event</button>
+            </div>
           </div>
-          <a href="${escapeAttr(playbackHref(video))}" target="_blank" rel="noreferrer">Open Video</a>
+          <div class="pillRow">
+            <span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span>
+            ${labels.map((label) => `
+              <span class="pill ${label.confidence >= 0.65 ? "confident" : "ambiguous"}">
+                ${escapeHtml(label.name)} ${Math.round((label.confidence || 0) * 100)}%
+              </span>
+            `).join("")}
+          </div>
+          <p class="transcriptSnippet">${escapeHtml(video.transcript?.text || "")}</p>
+          ${labels[0]?.evidence ? `<p class="muted evidenceText">${escapeHtml(labels[0].evidence)}</p>` : ""}
         </div>
-        <div class="pillRow">
-          <span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span>
-          ${labels.map((label) => `<span class="pill">${escapeHtml(label.name)} ${Math.round((label.confidence || 0) * 100)}%</span>`).join("")}
-        </div>
-        ${labels[0]?.evidence ? `<p class="muted">${escapeHtml(labels[0].evidence)}</p>` : ""}
       </article>
     `;
   }).join("") || `<p class="muted">No matching videos.</p>`;
@@ -355,6 +380,16 @@ async function action(path, body = {}, options = {}) {
   }
 }
 
+async function bulkAction(actionName) {
+  if (!state.selectedFolderId) return;
+  const folder = state.summary?.folders?.find((item) => item.id === state.selectedFolderId);
+  const name = folder?.name || state.selectedFolderId;
+  const label = actionName === "mark-indexed" ? "Mark all videos as Indexed" : "Clear all labels and mark for review";
+  const confirmed = window.confirm(`${label} for "${name}"?`);
+  if (!confirmed) return;
+  await action("/api/bulk-review", { folderId: state.selectedFolderId, action: actionName }, { silent: true });
+}
+
 async function startProcessing(folderId) {
   const result = await action("/api/process-folder-async", { folderId, parallel: 4 });
   if (result?.ok) scheduleJobPolling(true);
@@ -371,6 +406,14 @@ async function startReprocessing(folderId) {
     reprocess: true
   });
   if (result?.ok) scheduleJobPolling(true);
+}
+
+async function deleteFolder(folderId) {
+  const folder = state.summary?.folders?.find((item) => item.id === folderId);
+  const name = folder?.name || folderId;
+  const confirmed = window.confirm(`Permanently remove "${name}" and all its videos from the index? Local media files on disk will NOT be deleted.`);
+  if (!confirmed) return;
+  await action("/api/delete-folder", { folderId });
 }
 
 async function runUrlAction() {
@@ -395,6 +438,8 @@ async function runUrlAction() {
     await startProcessing(folderId);
   } else if (actionName === "reprocess") {
     await startReprocessing(folderId);
+  } else if (actionName === "delete") {
+    await deleteFolder(folderId);
   }
 }
 

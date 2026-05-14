@@ -233,12 +233,22 @@ select {
   color: var(--accent-dark);
 }
 
+.deleteActionLink {
+  border-color: #e4b8b8;
+  background: #fff0f0;
+  color: var(--bad);
+}
+
 .actionLink:hover {
   background: var(--accent-dark);
 }
 
 .subtleActionLink:hover {
   background: #eef5f4;
+}
+
+.deleteActionLink:hover {
+  background: #ffe5e5;
 }
 
 .statusBadge {
@@ -291,6 +301,41 @@ select {
   border-radius: 8px;
   padding: 12px;
   background: #fbfcf9;
+}
+
+.searchResult {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.resultPreview {
+  flex: 0 0 auto;
+}
+
+.resultContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.resultActions {
+  display: flex;
+  gap: 8px;
+}
+
+.transcriptSnippet {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.evidenceText {
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .itemHeader,
@@ -387,6 +432,16 @@ select {
   font-size: 12px;
 }
 
+.pill.confident {
+  background: #eef5f4;
+  color: var(--accent-dark);
+}
+
+.pill.ambiguous {
+  background: #fff7ea;
+  color: var(--warn);
+}
+
 .pill.warn {
   background: #fff7ea;
   color: var(--warn);
@@ -399,9 +454,15 @@ select {
 
 .eventTools {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 170px 180px;
+  grid-template-columns: minmax(260px, 1fr) 170px 180px auto;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.bulkActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .assetRow {
