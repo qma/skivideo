@@ -102,6 +102,7 @@
 - "Search Athletes" results enhanced with video previews, event dates, and larger transcript snippets.
 - Bulk review actions added to the event table ("Mark all as Indexed", "Clear all labels").
 - Optimizing `/media/:videoId` to avoid proxying SharePoint videos (use 302 redirect) to reduce bandwidth bloat.
+- Project instructions added to `GEMINI.md` (e.g., commit message prefixing).
 
 ## In Progress
 - Investigating potential UI improvements and data integrity checks.
