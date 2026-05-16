@@ -118,6 +118,7 @@
 - [codex] Added `npm run public:deploy:vercel` to build, deploy the prebuilt static output, and assign `ski-video-companion-public.vercel.app`.
 - [codex] Reworked the public static SharePoint links to avoid login-only tenant file URLs: exports now emit SharePoint `AllItems.aspx?id=...` view URLs, and the public UI bootstraps the anonymous session through the original shared folder link before opening a video or event folder.
 - [codex] Rebuilt and republished the public static app to Vercel; live `/data/lean-index.json` now has 57 folders, 823 videos, zero raw tenant-path links, and `P1000316.MP4` points at the generated SharePoint view URL.
+- [codex] Investigated direct anonymous SharePoint file links. SharePoint sharing metadata exposes no existing per-file anonymous link for `P1000316.MP4`; the public UI now shows an explicit note to open the public team folder once and leaves each video/event link as a direct target.
 - [gemini] Integrated a live public preview feature into the admin dashboard. Operators can now verify metadata changes in the public-facing UI code at `/public-preview/` without needing separate dev servers or production redeploys.
 
 ## In Progress

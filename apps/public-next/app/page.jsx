@@ -61,6 +61,7 @@ export default function PublicIndexPage() {
 
   const totalIndexed = videos.filter((video) => video.processing?.status === "indexed").length;
   const labeledVideos = videos.filter((video) => video.athleteLabels?.length).length;
+  const rootShareUrl = index?.teams?.[0]?.sharepointRootUrl || "";
 
   if (error) {
     return (
@@ -97,6 +98,18 @@ export default function PublicIndexPage() {
         <Metric label="Indexed" value={totalIndexed} />
         <Metric label="With Names" value={labeledVideos} />
       </section>
+
+      {rootShareUrl && (
+        <section className="sharepointNotice" aria-label="SharePoint access note">
+          <p>
+            SharePoint may ask for sign-in until your browser has opened the public team folder once. Open it once,
+            then return here and video links should open directly.
+          </p>
+          <a href={rootShareUrl} rel="noreferrer" target="_blank">
+            Open Public Team Folder
+          </a>
+        </section>
+      )}
 
       <section className="searchRow" aria-label="Search controls">
         <label className="searchBox">
@@ -156,7 +169,6 @@ export default function PublicIndexPage() {
                 <VideoResult
                   folder={foldersById.get(video.folderId)}
                   key={video.id}
-                  rootShareUrl={index.teams?.find((team) => team.id === video.teamId)?.sharepointRootUrl || index.teams?.[0]?.sharepointRootUrl || ""}
                   video={video}
                 />
               ))}
@@ -179,11 +191,10 @@ function Metric({ label, value }) {
   );
 }
 
-function VideoResult({ video, folder, rootShareUrl }) {
+function VideoResult({ video, folder }) {
   const labels = video.athleteLabels || [];
   const primaryLabel = labels[0];
-  const openVideo = () => openSharePointTarget(video.playbackUrl || video.sharepointUrl, rootShareUrl);
-  const openFolder = () => openSharePointTarget(folder?.sharepointUrl, rootShareUrl);
+  const videoUrl = video.playbackUrl || video.sharepointUrl;
   return (
     <article className="videoRow">
       <div className="videoMain">
@@ -207,38 +218,17 @@ function VideoResult({ video, folder, rootShareUrl }) {
         {video.transcript?.text && <p className="transcript">{video.transcript.text}</p>}
       </div>
       <div className="videoActions">
-        <button onClick={openVideo} type="button">
+        <a href={videoUrl} rel="noreferrer" target="_blank">
           Open Video
-        </button>
+        </a>
         {folder?.sharepointUrl && (
-          <button className="secondary" onClick={openFolder} type="button">
+          <a className="secondary" href={folder.sharepointUrl} rel="noreferrer" target="_blank">
             Event Folder
-          </button>
+          </a>
         )}
       </div>
     </article>
   );
-}
-
-function openSharePointTarget(targetUrl, rootShareUrl) {
-  if (!targetUrl) return;
-  if (!rootShareUrl || !targetUrl.includes("sharepoint.com/")) {
-    window.open(targetUrl, "_blank", "noopener,noreferrer");
-    return;
-  }
-
-  const opened = window.open(rootShareUrl, "_blank");
-  if (!opened) {
-    window.open(targetUrl, "_blank", "noopener,noreferrer");
-    return;
-  }
-  window.setTimeout(() => {
-    try {
-      opened.location.href = targetUrl;
-    } catch {
-      window.open(targetUrl, "_blank", "noopener,noreferrer");
-    }
-  }, 1400);
 }
 
 function normalize(value) {

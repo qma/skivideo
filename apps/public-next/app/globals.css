@@ -100,8 +100,8 @@ h3 {
 .summary {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric {
@@ -120,6 +120,35 @@ h3 {
 
 .metric strong {
   font-size: 1.45rem;
+}
+
+.sharepointNotice {
+  align-items: center;
+  background: #fff9e8;
+  border: 1px solid #ebcc82;
+  border-radius: 8px;
+  color: #5f4210;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.sharepointNotice p {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.sharepointNotice a {
+  background: #5f4210;
+  border-radius: 6px;
+  color: white;
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 9px 11px;
+  text-decoration: none;
 }
 
 .searchRow {
@@ -321,13 +350,11 @@ a:focus-visible {
   grid-auto-rows: min-content;
 }
 
-.videoActions button {
+.videoActions a {
   align-items: center;
   background: var(--blue);
-  border: 0;
   border-radius: 6px;
   color: white;
-  cursor: pointer;
   display: flex;
   font-weight: 700;
   justify-content: center;
@@ -336,7 +363,7 @@ a:focus-visible {
   text-decoration: none;
 }
 
-.videoActions button.secondary {
+.videoActions a.secondary {
   background: #eef2f5;
   color: var(--ink);
 }
@@ -365,9 +392,15 @@ a:focus-visible {
   }
 
   .summary,
+  .sharepointNotice,
   .searchRow,
   .contentGrid {
     grid-template-columns: 1fr;
+  }
+
+  .sharepointNotice {
+    align-items: stretch;
+    display: grid;
   }
 
   .events {
