@@ -819,12 +819,14 @@ The worker needs:
 
 ### SharePoint Links Require Login
 
-Risk: direct file URLs may not be truly anonymous even if the folder link is public.
+Risk: direct file URLs may not be truly anonymous even if the folder link is public. For the current TPT U14 folder share, the root folder link opens anonymously from a fresh browser state, but raw file URLs and SharePoint's own `:v:/r/...` direct file URL can return `403` with `x-forms_based_auth_required` until the browser has opened the root shared folder. File-level `GetSharingInformation` for `P1000316.MP4` showed no existing per-file anonymous link (`anonymousLinkAbilities.canGetReadLink.enabled=false`, `anyoneLinkAbilities.canGetReadLink.enabled=false`, `mainLinkAbilities=null`).
 
 Mitigation:
 
 - Store both `sharepointUrl` and provider-specific link metadata.
-- Test public playback in an incognito browser before publishing.
+- Test public playback in an incognito/no-cookie browser before publishing, and verify page content rather than trusting HTTP 200 alone.
+- For Phase 1, tell viewers to open the public source folder once, then use direct item links from the public app.
+- If authenticated Microsoft Graph access is available and tenant policy allows it, generate true file-level anonymous links with Graph `driveItem:createLink` and publish those links.
 - If direct source URLs fail, use provider-supported sharing links, not app-server byte proxy.
 
 ### Heavy Processing In Web Runtime

@@ -71,6 +71,8 @@ The SharePoint adapter should discover:
 - sibling transcript files
 - audio-only renditions if exposed by the provider
 
+Anonymous folder shares do not guarantee anonymous direct file playback links. For the current TPT U14 SharePoint source, the root folder share opens from a fresh browser state, but raw file URLs and SharePoint's own `:v:/r/...` direct file URL can require sign-in until the browser has opened the root folder share. File-level sharing metadata for a sample video (`P1000316.MP4`) did not expose an existing anonymous per-file link. Treat `sharepointUrl` as a provider view target, not as a guaranteed no-cookie playback URL, unless an authenticated Microsoft Graph/SharePoint operation has generated and verified a file-level anonymous link.
+
 ### Microsoft/Teams Transcripts
 
 Transcript discovery should run before media download. If Microsoft-generated transcript files or Stream transcript assets are available, they are preferred over generating new transcripts.

@@ -10,7 +10,7 @@ The static app is implemented in `apps/public-next/` and reads one generated JSO
 apps/public-next/public/data/lean-index.json
 ```
 
-That file is generated from the local working store by a public-only export path. Playback links point directly to the original SharePoint source URL. The hosted app should not serve or proxy videos.
+That file is generated from the local working store by a public-only export path. Playback links point directly to SharePoint item view URLs derived from the original source. The hosted app should not serve or proxy videos.
 
 ## Data Flow
 
@@ -48,6 +48,21 @@ The CLI audit checks these exclusions:
 ```sh
 npm run public:audit
 ```
+
+## SharePoint Link Behavior
+
+The source team folder is an anonymous SharePoint folder share. A fresh browser can open the root shared folder URL, but direct file URLs inside that folder are not necessarily anonymous until SharePoint has established an anonymous browser session for the share.
+
+Observed behavior for `P1000316.MP4`:
+
+- The root folder share opens anonymously from a fresh state.
+- Raw tenant file URLs such as `/sites/.../P1000316.MP4`, `?web=1`, and SharePoint's own `:v:/r/...` `directUrl` return `403` with `x-forms_based_auth_required` from a no-cookie state.
+- `GetSharingInformation` for the file reports no existing per-file anonymous link: `anonymousLinkAbilities.canGetReadLink.enabled=false`, `anyoneLinkAbilities.canGetReadLink.enabled=false`, and `mainLinkAbilities=null`.
+- SharePoint `guestaccess.aspx` candidate URLs can return HTTP 200 while still rendering an error page, so status code alone is not a reliable proof of public playback.
+
+The public app therefore shows a note prompting viewers to open the public team folder once. `Open Video` and `Event Folder` remain normal direct links to the generated SharePoint item/folder view URLs; the app does not perform a hidden folder-open redirect and does not proxy video bytes.
+
+If authenticated Microsoft Graph access is added later, the admin pipeline may generate true per-file anonymous links with Graph `driveItem:createLink` (`type: view`, `scope: anonymous`) when tenant policy allows it. Those links should be stored as provider link metadata and verified in an incognito/no-cookie browser before publishing.
 
 ## Commands
 
