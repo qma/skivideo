@@ -116,6 +116,7 @@
 - [codex] Corrected the Vercel deployment path: remote Vercel builds cannot regenerate the real public index without local `data/index/store.json`, so the published alias now points at the prebuilt static `apps/public-next/out` deployment.
 - [codex] Verified the live Vercel app: `/` returns 200, `/data/lean-index.json` returns 200 with 57 folders, 823 videos, and no local paths, download URLs, or job records.
 - [codex] Added `npm run public:deploy:vercel` to build, deploy the prebuilt static output, and assign `ski-video-companion-public.vercel.app`.
+- [gemini] Integrated a live public preview feature into the admin dashboard. Operators can now verify metadata changes in the public-facing UI code at `/public-preview/` without needing separate dev servers or production redeploys.
 
 ## In Progress
 - None.

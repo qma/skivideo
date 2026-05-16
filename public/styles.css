@@ -99,6 +99,26 @@ button {
   border-color: var(--accent);
   padding: 0 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.subtleButton,
+.navLink {
+  min-height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font: inherit;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 12px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13.33px; /* Match button default */
 }
 
 button:hover {

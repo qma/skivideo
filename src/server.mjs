@@ -145,6 +145,22 @@ app.post("/api/export-lean", asyncRoute(async () => {
 }));
 app.post("/api/sync-metadata", asyncRoute(async () => syncMetadataBackend(config, await store.read())));
 
+// Public Preview Routes
+// Allows viewing the public-facing UI code (from apps/public-next/out) with live metadata.
+// Requires 'npm run public:build' to have been run at least once to generate the UI code.
+app.get("/data/lean-index.json", asyncRoute(async () => {
+  const result = await store.exportPublicLean();
+  return result.lean;
+}));
+app.use("/_next", express.static(path.join(config.rootDir, "apps/public-next/out/_next")));
+app.use("/public-preview", (req, res) => {
+  const indexPath = path.join(config.rootDir, "apps/public-next/out/index.html");
+  if (!fsSync.existsSync(indexPath)) {
+    return res.status(503).send("<h1>Public Preview Unavailable</h1><p>Please run <code>npm run public:build</code> first to generate the UI code.</p>");
+  }
+  res.sendFile(indexPath);
+});
+
 app.get("/media/:videoId", asyncRoute(async (req, res) => serveMedia(req, res, req.params.videoId)));
 app.use(express.static(path.join(config.rootDir, "public")));
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
