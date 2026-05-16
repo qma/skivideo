@@ -29,6 +29,8 @@ export function loadConfig() {
     openaiLabelModel: process.env.OPENAI_LABEL_MODEL || "gpt-4o-mini",
     transcriptionPromptEnabled: /^(1|true|yes)$/i.test(process.env.TRANSCRIPTION_PROMPT || ""),
     transcriptionPromptMaxNames: Number(process.env.TRANSCRIPTION_PROMPT_MAX_NAMES || 80),
+    whisperModelSize: process.env.WHISPER_MODEL_SIZE || "large-v3",
+    whisperBackend: process.env.WHISPER_BACKEND || "whisper.cpp",
     whisperCppNoGpu: /^(1|true|yes)$/i.test(process.env.WHISPER_CPP_NO_GPU || ""),
     metadataBackend: process.env.METADATA_BACKEND || "local",
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",

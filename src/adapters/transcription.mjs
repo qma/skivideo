@@ -7,16 +7,29 @@ import { resolveFfmpeg } from "./media.mjs";
 
 export async function detectTranscriptionBackends(config) {
   const whisperCpp = await whisperCppWorks(config);
-  if (whisperCpp && process.env.TRANSCRIPTION_BACKEND !== "mlx") {
+  const preferred = config.whisperBackend || "whisper.cpp";
+
+  if (preferred === "whisper.cpp" && whisperCpp) {
     return {
       mlxWhisper: false,
-      whisperCpp,
+      whisperCpp: true,
       openai: Boolean(config.openaiApiKey)
     };
   }
+
   const mlxPython = path.join(config.rootDir, ".venv", "bin", "python");
+  const mlxWhisper = await executableWorks(mlxPython, ["-c", "import mlx_whisper; print('ok')"], { timeoutMs: 60000 });
+
+  if (mlxWhisper) {
+    return {
+      mlxWhisper: true,
+      whisperCpp: preferred === "whisper.cpp" ? whisperCpp : false,
+      openai: Boolean(config.openaiApiKey)
+    };
+  }
+
   return {
-    mlxWhisper: await executableWorks(mlxPython, ["-c", "import mlx_whisper; print('ok')"], { timeoutMs: 60000 }),
+    mlxWhisper: false,
     whisperCpp,
     openai: Boolean(config.openaiApiKey)
   };
@@ -31,7 +44,8 @@ export async function transcribeAudio(config, audioPath, options = {}) {
 }
 
 export async function transcribeWithMlxWhisper(config, audioPath, options = {}) {
-  const model = options.model || process.env.MLX_WHISPER_MODEL || "mlx-community/whisper-small-mlx";
+  const size = options.modelSize || config.whisperModelSize || "large-v3";
+  const model = options.model || process.env.MLX_WHISPER_MODEL || `mlx-community/whisper-${size}-mlx`;
   const python = path.join(config.rootDir, ".venv", "bin", "python");
   const outDir = path.join(config.transcriptDir, slugify(path.basename(audioPath)));
   await fs.mkdir(outDir, { recursive: true });
@@ -106,7 +120,7 @@ export async function transcribeWithOpenAi(config, audioPath, options = {}) {
 
 export async function transcribeWithWhisperCpp(config, audioPath, options = {}) {
   const command = process.env.WHISPER_CPP_BIN || "/opt/homebrew/bin/whisper-cli";
-  const model = options.model || process.env.WHISPER_CPP_MODEL || path.join(config.dataDir, "models", "ggml-base.en.bin");
+  const model = options.model || process.env.WHISPER_CPP_MODEL || await getWhisperCppModelPath(config, options.modelSize || config.whisperModelSize);
   const noGpu = shouldDisableWhisperCppGpu(config, options);
   const inputPath = await ensureWhisperCppAudio(config, audioPath);
   const outDir = path.join(config.transcriptDir, slugify(path.basename(audioPath)));
@@ -126,8 +140,8 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
     args.push("--prompt", options.prompt);
     if (options.carryInitialPrompt !== false) args.push("--carry-initial-prompt");
   }
+  console.log(`[transcribeWithWhisperCpp] Running: ${command} ${args.join(" ")}`);
   await run(command, args, { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
-  const outPath = `${outputBase}.json`;
   const raw = JSON.parse(await fs.readFile(outPath, "utf8"));
   const segments = (raw.transcription || []).map((segment) => ({
     start: whisperTimeToSeconds(segment.offsets?.from),
@@ -171,14 +185,31 @@ function promptHash(prompt) {
 
 async function whisperCppWorks(config) {
   const command = process.env.WHISPER_CPP_BIN || "/opt/homebrew/bin/whisper-cli";
-  const model = process.env.WHISPER_CPP_MODEL || path.join(config.dataDir, "models", "ggml-base.en.bin");
   try {
     await fs.access(command);
+    const model = process.env.WHISPER_CPP_MODEL || await getWhisperCppModelPath(config, config.whisperModelSize);
     await fs.access(model);
     return true;
   } catch {
     return false;
   }
+}
+
+async function getWhisperCppModelPath(config, size = "large-v3") {
+  const baseDir = path.join(config.dataDir, "models");
+  const candidates = [
+    path.join(baseDir, `ggml-${size}.bin`),
+    path.join(baseDir, `ggml-${size}.en.bin`)
+  ];
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // Continue
+    }
+  }
+  return candidates[0];
 }
 
 async function ensureWhisperCppAudio(config, audioPath) {
