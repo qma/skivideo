@@ -88,6 +88,14 @@ export async function processFolder(config, store, folderId, options = {}) {
       await enqueueWrite(() => store.updateVideo(video.id, processed));
       if (processed.processing.status === "indexed") indexed += 1;
       else needsReview += 1;
+      await enqueueWrite(() => store.updateJob(jobId, {
+        message: `Processed ${indexed + needsReview + failed}/${videos.length}`,
+        details: "",
+        indexed,
+        needsReview,
+        failed,
+        parallel
+      }));
     } catch (error) {
       failed += 1;
       await enqueueWrite(() => store.updateVideo(video.id, {
@@ -97,14 +105,15 @@ export async function processFolder(config, store, folderId, options = {}) {
           processedAt: nowIso()
         }
       }));
+      await enqueueWrite(() => store.updateJob(jobId, {
+        message: `Failed: ${video.filename}`,
+        details: error.message,
+        indexed,
+        needsReview,
+        failed,
+        parallel
+      }));
     }
-    await enqueueWrite(() => store.updateJob(jobId, {
-      message: `Processed ${indexed + needsReview + failed}/${videos.length}`,
-      indexed,
-      needsReview,
-      failed,
-      parallel
-    }));
     return processNext();
   }
 

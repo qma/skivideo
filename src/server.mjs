@@ -356,6 +356,7 @@ function jobLogs(job) {
     at: job.startedAt || job.updatedAt || "",
     status: job.status || "",
     message: job.message || "",
+    details: job.details || "",
     indexed: job.indexed || 0,
     needsReview: job.needsReview || 0,
     failed: job.failed || 0,

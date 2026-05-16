@@ -511,9 +511,14 @@ function renderJobLog(detail) {
     job.parallel ? `parallel: ${job.parallel}` : "",
     "",
     "Log",
-    ...detail.logs.map((entry) => {
+    ...detail.logs.flatMap((entry) => {
       const counts = [entry.indexed ? `${entry.indexed} indexed` : "", entry.needsReview ? `${entry.needsReview} review` : "", entry.failed ? `${entry.failed} failed` : ""].filter(Boolean).join(", ");
-      return `${formatDateTime(entry.at)}  ${entry.status || "-"}  ${entry.message || ""}${counts ? ` (${counts})` : ""}`;
+      const mainLine = `${formatDateTime(entry.at)}  ${entry.status || "-"}  ${entry.message || ""}${counts ? ` (${counts})` : ""}`;
+      if (entry.details) {
+        const detailLines = String(entry.details).split("\n").filter(Boolean).map((line) => `    ${line}`);
+        return [mainLine, ...detailLines];
+      }
+      return [mainLine];
     })
   ].filter((line) => line !== "");
   el("logOutput").textContent = lines.join("\n");

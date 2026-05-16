@@ -549,6 +549,7 @@ function appendJobLog(previous, next, at) {
   if (
     last.status === entry.status
     && last.message === entry.message
+    && last.details === entry.details
     && last.indexed === entry.indexed
     && last.needsReview === entry.needsReview
     && last.failed === entry.failed
@@ -563,6 +564,7 @@ function jobLogEntry(job, at) {
     at,
     status: job.status || "",
     message: job.message || "",
+    details: job.details || "",
     indexed: job.indexed || 0,
     needsReview: job.needsReview || 0,
     failed: job.failed || 0,
