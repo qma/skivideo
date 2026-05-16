@@ -174,6 +174,25 @@ export class JsonStore {
     });
   }
 
+  async failRunningJobs(message = "Job interrupted (process restart or crash)") {
+    return this.mutate((store) => {
+      const updatedAt = nowIso();
+      store.jobs = store.jobs.map((job) => {
+        if (job.status !== "running") return job;
+        const nextJob = {
+          ...job,
+          status: "failed",
+          message,
+          updatedAt,
+          completedAt: updatedAt
+        };
+        nextJob.logs = appendJobLog(job, nextJob, updatedAt);
+        return nextJob;
+      });
+      return store;
+    });
+  }
+
   async exportLean() {
     const store = await this.read();
     const lean = buildLeanStore(store);

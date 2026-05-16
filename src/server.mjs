@@ -17,6 +17,7 @@ import { normalizeText } from "./lib/text.mjs";
 const config = loadConfig();
 const store = new JsonStore(config);
 await store.ensure();
+await store.failRunningJobs();
 
 const app = express();
 

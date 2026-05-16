@@ -111,6 +111,7 @@
 - [codex] Vercel config uses `npm ci`, `npm run public:build`, and `apps/public-next/out`; `.vercelignore` excludes local media, audio, transcripts, raw data, private index data, generated exports, model/tool caches, `.env`, and generated build outputs.
 - [codex] Re-verified public export and build after Vercel config: `npm run public:audit` passed with 57 folders and 757 videos; `npm run public:build` completed; a temporary static server returned `200` for `/` and `/data/lean-index.json`; browser title was `TPT U14 Video Index`.
 - [gemini] Refactored SharePoint source links into team/tenant metadata. Removed hardcoded Team Palisades Tahoe link from `src/config.mjs` and moved it into the JSON store under a new `teams` metadata collection. Updated CLI, pipeline, and API to look up source links from team metadata.
+- [gemini] Added automatic job cleanup on server startup. Orphaned "running" jobs from previous server instances are now marked as `failed` (Interrupted), ensuring the UI reflects the actual state and allowing for manual retries.
 
 ## In Progress
 - None.
