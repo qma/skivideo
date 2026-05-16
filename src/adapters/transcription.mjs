@@ -142,6 +142,7 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
   }
   console.log(`[transcribeWithWhisperCpp] Running: ${command} ${args.join(" ")}`);
   await run(command, args, { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
+  const outPath = `${outputBase}.json`;
   const raw = JSON.parse(await fs.readFile(outPath, "utf8"));
   const segments = (raw.transcription || []).map((segment) => ({
     start: whisperTimeToSeconds(segment.offsets?.from),
