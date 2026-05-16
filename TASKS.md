@@ -121,6 +121,8 @@
 - [codex] Investigated direct anonymous SharePoint file links. SharePoint sharing metadata exposes no existing per-file anonymous link for `P1000316.MP4`; the public UI now shows an explicit note to open the public team folder once and leaves each video/event link as a direct target.
 - [gemini] Integrated a live public preview feature into the admin dashboard. Operators can now verify metadata changes in the public-facing UI code at `/public-preview/` without needing separate dev servers or production redeploys.
 - [gemini] Made Whisper model size and backend configurable, defaulting to `large-v3` for higher accuracy. The system now honors `WHISPER_MODEL_SIZE` and `WHISPER_BACKEND` environment variables, while maintaining `whisper.cpp` as the primary default and supporting Metal/GPU acceleration.
+- [codex] Refactored the local cache layout so media, audio, and transcript artifacts mirror the SharePoint team folder under `data/{media,audio,transcripts}/TPT U14 2025-2026/`; added `scripts/migrate-cache-layout.mjs` for repeatable migration/cleanup.
+- [codex] Migrated the local metadata/cache to the mirrored layout and validated 823 video records with 0 stale local refs and 0 missing referenced local files.
 
 ## In Progress
 - None.

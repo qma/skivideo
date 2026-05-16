@@ -81,14 +81,16 @@ Use `prepare-folder` in low-data mode. It is the repeatable, codified event-prep
 - `data/index/store.json`: working local index.
 - `data/raw/`: downloaded public race assets and source snapshots.
 - `data/models/`: local Whisper/whisper.cpp model files, excluded from git.
-- `data/media/`: mirrored videos, excluded from git.
-- `data/audio/`: extracted or downloaded audio, excluded from git.
-- `data/transcripts/`: generated transcripts, excluded from git.
+- `data/media/TPT U14 2025-2026/`: mirrored videos, preserving the SharePoint event folder structure; excluded from git.
+- `data/audio/TPT U14 2025-2026/`: extracted or downloaded audio, preserving the same event structure; excluded from git.
+- `data/transcripts/TPT U14 2025-2026/`: generated transcripts, preserving the same event structure; excluded from git.
 - `data/exports/lean-index.json`: internal lean metadata export.
 - `data/exports/public/lean-index.json`: audited public metadata export for static publishing.
 - `apps/public-next/out/`: generated static public app for Vercel, Firebase Hosting, Cloudflare Pages, or any static host.
 
 The web app no longer loads `data/index/store.json` wholesale at startup. Folder cards are backed by a compact summary endpoint, while event video rows are fetched only when an event is opened.
+
+To migrate older slug-based local cache paths into the mirrored layout, run `node scripts/migrate-cache-layout.mjs` for a dry run, then `node scripts/migrate-cache-layout.mjs --apply`. Add `--cleanup-legacy` after auditing the dry run to remove unreferenced legacy cache files.
 
 ## Metadata Backend
 

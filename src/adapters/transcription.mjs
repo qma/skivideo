@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { slugify } from "../lib/ids.mjs";
+import { mirroredAudioPathForVideoPath, transcriptOutputPathForAudio } from "../lib/cachePaths.mjs";
 import { resolveFfmpeg } from "./media.mjs";
 
 export async function detectTranscriptionBackends(config) {
@@ -47,9 +47,8 @@ export async function transcribeWithMlxWhisper(config, audioPath, options = {}) 
   const size = options.modelSize || config.whisperModelSize || "large-v3";
   const model = options.model || process.env.MLX_WHISPER_MODEL || `mlx-community/whisper-${size}-mlx`;
   const python = path.join(config.rootDir, ".venv", "bin", "python");
-  const outDir = path.join(config.transcriptDir, slugify(path.basename(audioPath)));
-  await fs.mkdir(outDir, { recursive: true });
-  const outPath = path.join(outDir, "transcript.json");
+  const outPath = transcriptOutputPathForAudio(config, audioPath, "transcript.json");
+  await fs.mkdir(path.dirname(outPath), { recursive: true });
   const script = [
     "import json, pathlib, sys",
     "import mlx_whisper",
@@ -123,9 +122,9 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
   const model = options.model || process.env.WHISPER_CPP_MODEL || await getWhisperCppModelPath(config, options.modelSize || config.whisperModelSize);
   const noGpu = shouldDisableWhisperCppGpu(config, options);
   const inputPath = await ensureWhisperCppAudio(config, audioPath);
-  const outDir = path.join(config.transcriptDir, slugify(path.basename(audioPath)));
-  await fs.mkdir(outDir, { recursive: true });
-  const outputBase = path.join(outDir, options.prompt ? `whisper-cpp-prompted-${promptHash(options.prompt)}` : "whisper-cpp");
+  const outPath = transcriptOutputPathForAudio(config, audioPath, options.prompt ? `whisper-cpp-prompted-${promptHash(options.prompt)}.json` : "whisper-cpp.json");
+  await fs.mkdir(path.dirname(outPath), { recursive: true });
+  const outputBase = outPath.replace(/\.json$/i, "");
   const args = [
     "-m", model,
     "-f", inputPath,
@@ -142,7 +141,6 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
   }
   console.log(`[transcribeWithWhisperCpp] Running: ${command} ${args.join(" ")}`);
   await run(command, args, { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
-  const outPath = `${outputBase}.json`;
   const raw = JSON.parse(await fs.readFile(outPath, "utf8"));
   const segments = (raw.transcription || []).map((segment) => ({
     start: whisperTimeToSeconds(segment.offsets?.from),
@@ -216,7 +214,7 @@ async function getWhisperCppModelPath(config, size = "large-v3") {
 async function ensureWhisperCppAudio(config, audioPath) {
   if (/\.(wav|mp3|flac|ogg)$/i.test(audioPath)) return audioPath;
   const ffmpeg = await resolveFfmpeg(config);
-  const outPath = path.join(config.audioDir, `${slugify(path.basename(audioPath))}.wav`);
+  const outPath = mirroredAudioPathForVideoPath(config, audioPath, ".wav");
   try {
     await fs.access(outPath);
     return outPath;

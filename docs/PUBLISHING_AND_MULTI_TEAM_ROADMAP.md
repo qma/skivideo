@@ -268,13 +268,13 @@ Add team/source fields and separate playback policy:
   "sourceUrl": "https://...",
   "downloadUrl": "https://...",
   "playbackUrl": "https://...",
-  "localVideoPath": "data/media/...",
+  "localVideoPath": "data/media/TPT U14 2025-2026/<SharePoint event folder>/<filename>",
   "localVideoPlayable": false,
   "publishStatus": "published | hidden | review_only"
 }
 ```
 
-For public publishing, include `playbackUrl` but not `downloadUrl`, local paths, or private credentials.
+For public publishing, include `playbackUrl` but not `downloadUrl`, local paths, or private credentials. Local cache paths are analysis-only and should mirror each source collection below a readable root such as `data/media/TPT U14 2025-2026/`; multi-team support should make that root a per-team/source setting rather than a global constant.
 
 ## Phase 1: Public Read-Only Lean View
 

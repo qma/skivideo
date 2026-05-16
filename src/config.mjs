@@ -18,6 +18,8 @@ export function loadConfig() {
     mediaDir: path.join(dataDir, "media"),
     audioDir: path.join(dataDir, "audio"),
     transcriptDir: path.join(dataDir, "transcripts"),
+    mediaCacheRootName: process.env.MEDIA_CACHE_ROOT_NAME || "TPT U14 2025-2026",
+    mediaCacheSharePointRootSegment: process.env.MEDIA_CACHE_SHAREPOINT_ROOT_SEGMENT || "2025-2026",
     exportDir: path.join(dataDir, "exports"),
     sharepointRootUrl: process.env.SHAREPOINT_ROOT_URL || defaultSharePointRootUrl,
     graphAccessToken: process.env.GRAPH_ACCESS_TOKEN || "",

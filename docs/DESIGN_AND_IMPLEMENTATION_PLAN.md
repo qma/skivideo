@@ -130,6 +130,12 @@ flowchart LR
 
 ## Metadata Model
 
+### Local Cache Layout
+
+Local media artifacts mirror the SharePoint team folder below a readable cache root. For the current TPT U14 season, video files live under `data/media/TPT U14 2025-2026/<event folder>/<filename>`, extracted audio under `data/audio/TPT U14 2025-2026/<event folder>/<filename>.m4a`, and transcript artifacts under `data/transcripts/TPT U14 2025-2026/<event folder>/<filename stem>/`. The cache root is configurable through `MEDIA_CACHE_ROOT_NAME`, and the SharePoint season/root segment used for trimming source paths is configurable through `MEDIA_CACHE_SHAREPOINT_ROOT_SEGMENT`.
+
+Older slug-based cache layouts can be migrated with `node scripts/migrate-cache-layout.mjs` for a dry run and `node scripts/migrate-cache-layout.mjs --apply` after inspection. Add `--cleanup-legacy` only when the dry run shows no referenced files outside the mirrored cache root.
+
 ### Folder/Event Record
 
 ```json
@@ -178,17 +184,17 @@ flowchart LR
   "filename": "clip.mp4",
   "sharepointUrl": "https://...",
   "downloadUrl": "https://...",
-  "localVideoPath": "data/media/...",
-  "localAudioPath": "data/audio/...",
+  "localVideoPath": "data/media/TPT U14 2025-2026/<SharePoint event folder>/clip.mp4",
+  "localAudioPath": "data/audio/TPT U14 2025-2026/<SharePoint event folder>/clip.m4a",
   "transcript": {
     "source": "microsoft_transcript | audio_only_transcription | video_audio_extraction | unavailable",
     "text": "normalized transcript text",
     "segments": [],
-    "localPath": "data/transcripts/..."
+    "localPath": "data/transcripts/TPT U14 2025-2026/<SharePoint event folder>/clip/whisper-cpp.json"
   },
   "transcriptRef": {
     "source": "local_mlx_whisper",
-    "localPath": "data/transcripts/.../transcript.json",
+    "localPath": "data/transcripts/TPT U14 2025-2026/<SharePoint event folder>/clip/transcript.json",
     "model": "mlx-community/whisper-small-mlx",
     "textLength": 9,
     "segmentCount": 1

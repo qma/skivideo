@@ -4,7 +4,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { slugify } from "../lib/ids.mjs";
+import { mirroredAudioPathForVideoPath, mirroredVideoPath, transcriptCachePath } from "../lib/cachePaths.mjs";
 import { establishSharePointSession } from "./sharepointRest.mjs";
 
 export async function downloadToCache(url, targetPath, options = {}) {
@@ -36,7 +36,7 @@ export async function cacheTranscript(video, config, rootUrl = config.sharepoint
   if (source.text) return source;
   if (!(source.downloadUrl || source.sourceUrl)) return source;
   const url = source.downloadUrl || source.sourceUrl;
-  const target = path.join(config.transcriptDir, `${slugify(video.id)}.txt`);
+  const target = transcriptCachePath(config, video, {}, "microsoft-transcript.txt");
   const downloaded = await downloadToCache(url, target, await sharePointDownloadOptions(rootUrl, url));
   const text = await fs.readFile(downloaded.path, "utf8");
   return {
@@ -49,14 +49,13 @@ export async function cacheTranscript(video, config, rootUrl = config.sharepoint
 export async function mirrorVideo(video, folder, config, rootUrl = config.sharepointRootUrl) {
   if (video.localVideoPath && await usableCachedFile(video.localVideoPath)) return video.localVideoPath;
   if (!video.downloadUrl) throw new Error(`No download URL for ${video.filename}`);
-  const folderSlug = slugify(folder?.name || video.folderId);
-  const target = path.join(config.mediaDir, folderSlug, video.filename);
+  const target = mirroredVideoPath(config, video, folder);
   const downloaded = await downloadToCache(video.downloadUrl, target, await sharePointDownloadOptions(rootUrl, video.downloadUrl));
   return downloaded.path;
 }
 
 export async function extractAudio(videoPath, config) {
-  const outPath = path.join(config.audioDir, `${slugify(path.basename(videoPath))}.m4a`);
+  const outPath = mirroredAudioPathForVideoPath(config, videoPath, ".m4a");
   if (await usableCachedFile(outPath)) {
     return outPath;
   }
