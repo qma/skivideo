@@ -11,7 +11,8 @@
     "public:export": "node src/cli.mjs export-public && node scripts/prepare-public-next.mjs",
     "public:audit": "node src/cli.mjs audit-public-export data/exports/public/lean-index.json",
     "public:build": "npm run public:export && next build apps/public-next",
-    "public:dev": "npm run public:export && next dev apps/public-next -p 4174"
+    "public:dev": "npm run public:export && next dev apps/public-next -p 4174",
+    "public:deploy:vercel": "node scripts/deploy-public-vercel.mjs"
   },
   "engines": {
     "node": ">=20"

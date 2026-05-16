@@ -2,7 +2,7 @@
 
 ## Current Focus
 
-- Execute the next publishing work package after selecting Vercel as the first Phase 1 static host.
+- Continue post-publish hardening for the Phase 1 public app.
 
 ## Completed
 
@@ -112,6 +112,10 @@
 - [codex] Re-verified public export and build after Vercel config: `npm run public:audit` passed with 57 folders and 757 videos; `npm run public:build` completed; a temporary static server returned `200` for `/` and `/data/lean-index.json`; browser title was `TPT U14 Video Index`.
 - [gemini] Refactored SharePoint source links into team/tenant metadata. Removed hardcoded Team Palisades Tahoe link from `src/config.mjs` and moved it into the JSON store under a new `teams` metadata collection. Updated CLI, pipeline, and API to look up source links from team metadata.
 - [gemini] Added automatic job cleanup on server startup. Orphaned "running" jobs from previous server instances are now marked as `failed` (Interrupted), ensuring the UI reflects the actual state and allowing for manual retries.
+- [codex] Published the static public app to Vercel at `https://ski-video-companion-public.vercel.app`.
+- [codex] Corrected the Vercel deployment path: remote Vercel builds cannot regenerate the real public index without local `data/index/store.json`, so the published alias now points at the prebuilt static `apps/public-next/out` deployment.
+- [codex] Verified the live Vercel app: `/` returns 200, `/data/lean-index.json` returns 200 with 57 folders, 823 videos, and no local paths, download URLs, or job records.
+- [codex] Added `npm run public:deploy:vercel` to build, deploy the prebuilt static output, and assign `ski-video-companion-public.vercel.app`.
 
 ## In Progress
 - None.

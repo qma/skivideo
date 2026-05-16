@@ -14,3 +14,4 @@ apps/public-next/.next/
 apps/public-next/out/
 apps/public-next/public/data/
 *.log
+.vercel

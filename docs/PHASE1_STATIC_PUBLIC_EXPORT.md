@@ -89,8 +89,17 @@ Vercel CLI deploy path:
 ```sh
 npm run public:audit
 npm run public:build
-npx vercel deploy --prod
+npx vercel deploy apps/public-next/out --prod --yes
+npx vercel alias set <deployment-url> ski-video-companion-public.vercel.app
 ```
+
+Or use the project script, which runs the build, deploys `apps/public-next/out`, and points the public alias at the new deployment:
+
+```sh
+npm run public:deploy:vercel
+```
+
+Important: do not rely on Vercel remote build to regenerate the public export unless the build environment has access to the local `data/index/store.json` equivalent. The working index, media, transcripts, and raw data are intentionally excluded from upload. The reliable Phase 1 flow is to generate and audit the static export locally, then deploy the prebuilt `apps/public-next/out/` directory.
 
 Git-connected deploy settings should match:
 
@@ -123,7 +132,7 @@ Optional `vercel.json`:
 }
 ```
 
-Use the static configuration above instead of a Next.js server deployment for Phase 1. This keeps the public app as CDN-hosted HTML, CSS, JS, and JSON.
+Use the static configuration above instead of a Next.js server deployment for Phase 1. This keeps the public app as CDN-hosted HTML, CSS, JS, and JSON. For Git-connected CI later, the CI job must either receive a generated public export artifact or pull metadata from a hosted metadata backend instead of depending on local ignored data files.
 
 ## Firebase Hosting
 
