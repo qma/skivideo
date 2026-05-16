@@ -276,10 +276,11 @@ export function buildLeanStore(store) {
 export function buildPublicLeanStore(store) {
   const publishableStatuses = new Set(["indexed", "needs_review"]);
   const folders = store.folders || [];
+  const publicLinks = createPublicSharePointLinks(store);
   const videos = (store.videos || [])
     .filter((video) => publishableStatuses.has(video.processing?.status))
     .filter((video) => video.sharepointUrl)
-    .map(sanitizePublicVideo);
+    .map((video) => sanitizePublicVideo(video, publicLinks.videoUrl(video)));
   const folderStats = new Map();
   for (const video of videos) {
     const current = folderStats.get(video.folderId) || {
@@ -305,7 +306,7 @@ export function buildPublicLeanStore(store) {
     },
     teams: store.teams || [],
     folders: folders
-      .map((folder) => sanitizePublicFolder(folder, folderStats.get(folder.id)))
+      .map((folder) => sanitizePublicFolder(folder, folderStats.get(folder.id), publicLinks.folderUrl(folder)))
       .sort((a, b) => String(a.eventDate || a.name).localeCompare(String(b.eventDate || b.name))),
     videos,
     events: (store.events || []).map(sanitizePublicEvent)
@@ -336,13 +337,13 @@ export function auditPublicLeanStore(lean) {
   };
 }
 
-function sanitizePublicFolder(folder, stats = {}) {
+function sanitizePublicFolder(folder, stats = {}, publicSharepointUrl = "") {
   return {
     id: folder.id,
     teamId: folder.teamId || "team_tpt_u14_2025_2026",
     name: folder.name || "",
     source: folder.source || "",
-    sharepointUrl: folder.sharepointUrl || "",
+    sharepointUrl: publicSharepointUrl || folder.sharepointUrl || "",
     itemCount: folder.itemCount || 0,
     timeCreated: folder.timeCreated || "",
     timeLastModified: folder.timeLastModified || "",
@@ -359,7 +360,8 @@ function sanitizePublicFolder(folder, stats = {}) {
   };
 }
 
-function sanitizePublicVideo(video) {
+function sanitizePublicVideo(video, publicSharepointUrl = "") {
+  const sharepointUrl = publicSharepointUrl || video.sharepointUrl || "";
   return {
     id: video.id,
     teamId: video.teamId || "team_tpt_u14_2025_2026",
@@ -367,8 +369,8 @@ function sanitizePublicVideo(video) {
     filename: video.filename || "",
     sizeBytes: video.sizeBytes || 0,
     mimeType: video.mimeType || "",
-    sharepointUrl: video.sharepointUrl || "",
-    playbackUrl: video.sharepointUrl || "",
+    sharepointUrl,
+    playbackUrl: sharepointUrl,
     timeCreated: video.timeCreated || "",
     timeLastModified: video.timeLastModified || "",
     transcript: sanitizePublicTranscript(video.transcript),
@@ -379,6 +381,60 @@ function sanitizePublicVideo(video) {
       processedAt: video.processing?.processedAt || "",
       reviewedAt: video.processing?.reviewedAt || ""
     }
+  };
+}
+
+function createPublicSharePointLinks(store) {
+  const foldersById = new Map((store.folders || []).map((folder) => [folder.id, folder]));
+  const teamsById = new Map((store.teams || []).map((team) => [team.id, team]));
+  const defaultTeam = (store.teams || [])[0] || {};
+
+  function teamForItem(item) {
+    const folder = item.folderId ? foldersById.get(item.folderId) : null;
+    return teamsById.get(item.teamId) || teamsById.get(folder?.teamId) || defaultTeam;
+  }
+
+  return {
+    folderUrl(folder) {
+      return publicSharePointViewUrl(teamForItem(folder).sharepointRootUrl, folder.serverRelativeUrl || folder.path, "folder");
+    },
+    videoUrl(video) {
+      return publicSharePointViewUrl(teamForItem(video).sharepointRootUrl, video.serverRelativeUrl, "file");
+    }
+  };
+}
+
+function publicSharePointViewUrl(rootShareUrl, serverRelativeUrl, itemType) {
+  if (!rootShareUrl || !serverRelativeUrl) return "";
+  let root;
+  try {
+    root = new URL(rootShareUrl);
+  } catch {
+    return "";
+  }
+
+  const parsed = parseSharePointServerRelativeUrl(serverRelativeUrl);
+  if (!parsed) return "";
+
+  const params = [`id=${encodeURIComponent(serverRelativeUrl)}`];
+  if (itemType === "file") {
+    const parentPath = serverRelativeUrl.slice(0, serverRelativeUrl.lastIndexOf("/"));
+    if (parentPath) params.push(`parent=${encodeURIComponent(parentPath)}`);
+  }
+  const shareHint = root.searchParams.get("e");
+  if (shareHint) params.push(`e=${encodeURIComponent(shareHint)}`);
+
+  return `${root.origin}${parsed.sitePath}/${encodeURIComponent(parsed.libraryName)}/Forms/AllItems.aspx?${params.join("&")}`;
+}
+
+function parseSharePointServerRelativeUrl(serverRelativeUrl) {
+  const parts = String(serverRelativeUrl || "").split("/").filter(Boolean);
+  const siteIndex = parts.findIndex((part) => /^(sites|teams)$/i.test(part));
+  if (siteIndex < 0 || !parts[siteIndex + 1] || !parts[siteIndex + 2]) return null;
+  const sitePath = `/${encodeURIComponent(parts[siteIndex])}/${encodeURIComponent(parts[siteIndex + 1])}`;
+  return {
+    sitePath,
+    libraryName: parts[siteIndex + 2]
   };
 }
 

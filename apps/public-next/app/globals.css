@@ -321,11 +321,13 @@ a:focus-visible {
   grid-auto-rows: min-content;
 }
 
-.videoActions a {
+.videoActions button {
   align-items: center;
   background: var(--blue);
+  border: 0;
   border-radius: 6px;
   color: white;
+  cursor: pointer;
   display: flex;
   font-weight: 700;
   justify-content: center;
@@ -334,7 +336,7 @@ a:focus-visible {
   text-decoration: none;
 }
 
-.videoActions a.secondary {
+.videoActions button.secondary {
   background: #eef2f5;
   color: var(--ink);
 }

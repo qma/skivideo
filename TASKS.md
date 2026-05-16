@@ -116,6 +116,8 @@
 - [codex] Corrected the Vercel deployment path: remote Vercel builds cannot regenerate the real public index without local `data/index/store.json`, so the published alias now points at the prebuilt static `apps/public-next/out` deployment.
 - [codex] Verified the live Vercel app: `/` returns 200, `/data/lean-index.json` returns 200 with 57 folders, 823 videos, and no local paths, download URLs, or job records.
 - [codex] Added `npm run public:deploy:vercel` to build, deploy the prebuilt static output, and assign `ski-video-companion-public.vercel.app`.
+- [codex] Reworked the public static SharePoint links to avoid login-only tenant file URLs: exports now emit SharePoint `AllItems.aspx?id=...` view URLs, and the public UI bootstraps the anonymous session through the original shared folder link before opening a video or event folder.
+- [codex] Rebuilt and republished the public static app to Vercel; live `/data/lean-index.json` now has 57 folders, 823 videos, zero raw tenant-path links, and `P1000316.MP4` points at the generated SharePoint view URL.
 - [gemini] Integrated a live public preview feature into the admin dashboard. Operators can now verify metadata changes in the public-facing UI code at `/public-preview/` without needing separate dev servers or production redeploys.
 
 ## In Progress

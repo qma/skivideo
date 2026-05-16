@@ -153,7 +153,12 @@ export default function PublicIndexPage() {
           {results.length ? (
             <div className="resultList">
               {results.map((video) => (
-                <VideoResult key={video.id} video={video} folder={foldersById.get(video.folderId)} />
+                <VideoResult
+                  folder={foldersById.get(video.folderId)}
+                  key={video.id}
+                  rootShareUrl={index.teams?.find((team) => team.id === video.teamId)?.sharepointRootUrl || index.teams?.[0]?.sharepointRootUrl || ""}
+                  video={video}
+                />
               ))}
             </div>
           ) : (
@@ -174,9 +179,11 @@ function Metric({ label, value }) {
   );
 }
 
-function VideoResult({ video, folder }) {
+function VideoResult({ video, folder, rootShareUrl }) {
   const labels = video.athleteLabels || [];
   const primaryLabel = labels[0];
+  const openVideo = () => openSharePointTarget(video.playbackUrl || video.sharepointUrl, rootShareUrl);
+  const openFolder = () => openSharePointTarget(folder?.sharepointUrl, rootShareUrl);
   return (
     <article className="videoRow">
       <div className="videoMain">
@@ -200,17 +207,38 @@ function VideoResult({ video, folder }) {
         {video.transcript?.text && <p className="transcript">{video.transcript.text}</p>}
       </div>
       <div className="videoActions">
-        <a href={video.playbackUrl || video.sharepointUrl} rel="noreferrer" target="_blank">
+        <button onClick={openVideo} type="button">
           Open Video
-        </a>
+        </button>
         {folder?.sharepointUrl && (
-          <a className="secondary" href={folder.sharepointUrl} rel="noreferrer" target="_blank">
+          <button className="secondary" onClick={openFolder} type="button">
             Event Folder
-          </a>
+          </button>
         )}
       </div>
     </article>
   );
+}
+
+function openSharePointTarget(targetUrl, rootShareUrl) {
+  if (!targetUrl) return;
+  if (!rootShareUrl || !targetUrl.includes("sharepoint.com/")) {
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  const opened = window.open(rootShareUrl, "_blank");
+  if (!opened) {
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+  window.setTimeout(() => {
+    try {
+      opened.location.href = targetUrl;
+    } catch {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+  }, 1400);
 }
 
 function normalize(value) {
