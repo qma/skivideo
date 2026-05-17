@@ -29,6 +29,8 @@ export function loadConfig() {
     openaiApiKey: process.env.OPENAI_API_KEY || "",
     openaiTranscribeModel: process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
     openaiLabelModel: process.env.OPENAI_LABEL_MODEL || "gpt-4o-mini",
+    geminiApiKey: process.env.GEMINI_API_KEY || "",
+    geminiLabelModel: process.env.GEMINI_LABEL_MODEL || "gemini-2.0-flash",
     transcriptionPromptEnabled: /^(1|true|yes)$/i.test(process.env.TRANSCRIPTION_PROMPT || ""),
     transcriptionPromptMaxNames: Number(process.env.TRANSCRIPTION_PROMPT_MAX_NAMES || 80),
     // Whisper model size: tiny, base, small, medium, large-v1, large-v2, large-v3.

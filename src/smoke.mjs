@@ -2,13 +2,13 @@ import { loadConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { matchFolderToLiveTimingRaces, parseLiveTimingRacePayload } from "./adapters/events.mjs";
-import { deterministicLabels } from "./pipeline/labeler.mjs";
+import { heuristicLabels } from "./pipeline/labeler.mjs";
 
 const config = loadConfig();
 const store = new JsonStore(config);
 await store.ensure();
 
-const labels = deterministicLabels(
+const labels = heuristicLabels(
   {
     filename: "bib42_jane_smith_run1.mp4",
     transcript: { text: "Next up is Jane Smith, bib forty two." }
@@ -22,7 +22,7 @@ if (!labels.length || labels[0].name !== "Jane Smith") {
   throw new Error("Deterministic labeler smoke test failed.");
 }
 
-const cameraFilenameLabels = deterministicLabels(
+const cameraFilenameLabels = heuristicLabels(
   {
     filename: "P1000251.MP4",
     transcript: { text: "Jack, run one." }
@@ -40,7 +40,7 @@ if (cameraFilenameLabels.length !== 1 || cameraFilenameLabels[0].name !== "Jack 
   throw new Error("Camera filename should not be treated as a bib label.");
 }
 
-const ambiguousLabels = deterministicLabels(
+const ambiguousLabels = heuristicLabels(
   {
     filename: "clip.mp4",
     transcript: { text: "Hannah, run one." }
@@ -57,7 +57,7 @@ if (ambiguousLabels.length !== 2 || ambiguousLabels.some((label) => label.confid
   throw new Error("Ambiguous one-word roster matches should require review.");
 }
 
-const normalizedLabels = deterministicLabels(
+const normalizedLabels = heuristicLabels(
   {
     filename: "clip.mp4",
     transcript: { text: "Alice!" }
@@ -77,7 +77,7 @@ if (!aliceLabel || !alexLabel || Math.abs(probabilitySum - 1) > 0.001 || aliceLa
   throw new Error("Roster candidate probabilities should normalize raw fuzzy scores across athletes.");
 }
 
-const filenameRosterLabels = deterministicLabels(
+const filenameRosterLabels = heuristicLabels(
   {
     filename: "IzzyBronitsky_run2.MOV",
     transcript: { text: "" }

@@ -7,20 +7,33 @@ export async function labelVideoAthletes(config, video, folder) {
 }
 
 export async function labelVideoAthletesWithDebug(config, video, folder) {
-  const deterministic = deterministicLabelsWithDebug(video, folder);
-  const debug = deterministic.debug;
-  const deterministicLabelsOnly = deterministic.labels;
+  const heuristic = heuristicLabelsWithDebug(video, folder);
+  const debug = heuristic.debug;
+  const heuristicLabelsOnly = heuristic.labels;
+
+  if (config.geminiApiKey && (process.env.LLM_LABEL_MODE === "always" || !heuristicLabelsOnly.length)) {
+    try {
+      const geminiLabels = await labelWithGemini(config, video, folder);
+      const labels = mergeLabels(heuristicLabelsOnly, geminiLabels);
+      debug.gemini = { mode: process.env.LLM_LABEL_MODE === "always" ? "always" : "fallback", labels: geminiLabels.length };
+      debug.finalLabels = labels.map(debugLabelSummary);
+      return { labels, debug };
+    } catch (error) {
+      debug.notes.push(`Gemini labeling failed: ${error.message}`);
+    }
+  }
+
   if (config.openaiApiKey && process.env.LLM_LABEL_MODE === "always") {
     const openAiLabels = await labelWithOpenAi(config, video, folder);
-    const labels = mergeLabels(deterministicLabelsOnly, openAiLabels);
+    const labels = mergeLabels(heuristicLabelsOnly, openAiLabels);
     debug.openAi = { mode: "always", labels: openAiLabels.length };
     debug.finalLabels = labels.map(debugLabelSummary);
     return { labels, debug };
   }
-  if (deterministicLabelsOnly.length || !config.openaiApiKey) {
+  if (heuristicLabelsOnly.length || !config.openaiApiKey) {
     debug.openAi = { mode: config.openaiApiKey ? "skipped_deterministic_found_labels" : "unavailable" };
-    debug.finalLabels = deterministicLabelsOnly.map(debugLabelSummary);
-    return { labels: deterministicLabelsOnly, debug };
+    debug.finalLabels = heuristicLabelsOnly.map(debugLabelSummary);
+    return { labels: heuristicLabelsOnly, debug };
   }
   const labels = await labelWithOpenAi(config, video, folder);
   debug.openAi = { mode: "fallback_no_deterministic_labels", labels: labels.length };
@@ -28,18 +41,18 @@ export async function labelVideoAthletesWithDebug(config, video, folder) {
   return { labels, debug };
 }
 
-export function deterministicLabels(video, folder) {
-  return deterministicLabelsWithDebug(video, folder).labels;
+export function heuristicLabels(video, folder) {
+  return heuristicLabelsWithDebug(video, folder).labels;
 }
 
-function deterministicLabelsWithDebug(video, folder) {
+function heuristicLabelsWithDebug(video, folder) {
   const transcriptText = video.transcript?.text || "";
   const filename = video.filename || "";
   const roster = folder?.candidateRoster || [];
   const labels = [];
   const rosterLabelEntries = [];
   const debug = {
-    methodVersion: "deterministic-v2",
+    methodVersion: "heuristic-v1",
     transcriptChars: transcriptText.length,
     filename,
     rosterSize: roster.length,
@@ -181,6 +194,61 @@ function deterministicLabelsWithDebug(video, folder) {
   debug.finalLabels = finalLabels.map(debugLabelSummary);
   if (!finalLabels.length) debug.notes.push("No label met deterministic exact, filename, bib, or fuzzy thresholds.");
   return { labels: finalLabels, debug };
+}
+
+async function labelWithGemini(config, video, folder) {
+  const roster = (folder?.candidateRoster || [])
+    .map((racer) => `${racer.name}${racer.bib ? ` bib ${racer.bib}` : ""}${racer.team || racer.club ? ` team ${racer.team || racer.club}` : ""}`)
+    .join("\n");
+
+  const systemPrompt = `Extract skier athlete names from a skiing video transcript. 
+Use the provided candidate roster as the canonical source for names and spellings. 
+The event venue is ${folder?.eventMatch?.venue || "unknown"}, discipline is ${folder?.eventMatch?.discipline || "unknown"}, and date is ${folder?.eventMatch?.date || "unknown"}.
+Focus on identifying athletes actually featured in the video or explicitly called out as "in the gate", "on course", etc.
+Allow for fuzzy/phonetic matches based on common transcription errors.
+
+Output up to the top 5 candidates as a JSON array of objects. 
+Each object MUST have: "name" (canonical name from roster), "confidence" (0-1), "evidence" (short snippet from transcript), and "matchedRoster" (boolean).
+Return COMPACT JSON ONLY. No preamble.`;
+
+  const userContent = {
+    filename: video.filename,
+    transcript: video.transcript?.text || "",
+    candidateRoster: roster
+  };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiLabelModel}:generateContent?key=${config.geminiApiKey}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `${systemPrompt}\n\nInput Data:\n${JSON.stringify(userContent, null, 2)}` }]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API failed: ${response.status} ${await response.text()}`);
+  }
+
+  const json = await response.json();
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+  const parsed = JSON.parse(text);
+  const labels = Array.isArray(parsed) ? parsed : (parsed.labels || []);
+
+  return labels.map((label) => ({
+    ...label,
+    source: "gemini_llm_audio_roster_reasoning",
+    methodVersion: `gemini-${config.geminiLabelModel}-v1`
+  }));
 }
 
 async function labelWithOpenAi(config, video, folder) {
