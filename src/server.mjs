@@ -295,27 +295,38 @@ async function summary() {
     transcripts: 0,
     labels: 0
   }]));
-  let labels = 0;
-  for (const video of state.videos) {
-    const stats = folderStats.get(video.folderId);
+  const videoStats = await Promise.all(state.videos.map(async (video) => {
     const labelCount = video.athleteLabels?.length || 0;
-    labels += labelCount;
+    const isReadable = video.localVideoPath ? await readableLocalMedia(video.localVideoPath) : null;
+    return {
+      folderId: video.folderId,
+      labelCount,
+      isReadable: Boolean(isReadable),
+      hasPath: Boolean(video.localVideoPath),
+      hasTranscript: Boolean(video.transcript?.text),
+      status: video.processing?.status || "pending"
+    };
+  }));
+
+  let totalLabels = 0;
+  for (const v of videoStats) {
+    totalLabels += v.labelCount;
+    const stats = folderStats.get(v.folderId);
     if (!stats) continue;
     stats.videoCount += 1;
-    stats.labels += labelCount;
-    if (video.localVideoPath) stats.localVideoRefs += 1;
-    if (video.localVideoPath && await readableLocalMedia(video.localVideoPath)) stats.localVideo += 1;
-    if (video.transcript?.text) stats.transcripts += 1;
-    const status = video.processing?.status || "pending";
-    if (status === "indexed") stats.indexed += 1;
-    else if (status === "needs_review") stats.needsReview += 1;
-    else if (status === "failed") stats.failed += 1;
+    stats.labels += v.labelCount;
+    if (v.hasPath) stats.localVideoRefs += 1;
+    if (v.isReadable) stats.localVideo += 1;
+    if (v.hasTranscript) stats.transcripts += 1;
+    if (v.status === "indexed") stats.indexed += 1;
+    else if (v.status === "needs_review") stats.needsReview += 1;
+    else if (v.status === "failed") stats.failed += 1;
   }
   return {
     counts: {
       folders: state.folders.length,
       videos: state.videos.length,
-      labels
+      labels: totalLabels
     },
     folders: state.folders.map((folder) => ({
       id: folder.id,
