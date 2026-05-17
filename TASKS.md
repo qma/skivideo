@@ -139,6 +139,8 @@
 - [codex] Relabeled `GS Camp April 24` and `GS Camp April 25` with label debug data. Results: Apr 24 is 2 indexed / 11 review; Apr 25 is 9 indexed / 10 review. Debug output shows remaining review causes such as blank audio, non-TPT names, ambiguous first-name-only callouts, and fuzzy false positives.
 - [codex] Updated event-list media stats to show playable local media separately from metadata path refs. Jan 9 audit now reports: `GS Race Jan 9. Northstar Top, Day 1` 99 refs / 99 playable; `GS Race Jan 9. Northstar. Day 1` 117 refs / 1 playable, confirming dataless placeholders rather than bad path calculation.
 - [codex] Added an event roster export asset: events with `candidateRoster` now show an `Extracted roster: N racers` asset in the event view, backed by `/api/event-roster.csv?folderId=...`.
+- [codex] Installed `data/models/ggml-medium.bin` so the configured `WHISPER_MODEL_SIZE=medium` default is actually available to whisper.cpp. Reprocessed `GS Camp April 24` and `GS Camp April 25` local-only with medium; metadata now points all 32 camp videos at `ggml-medium.bin`, and sample raw whisper JSON reports `model.type: "medium"`.
+- [codex] Hardened whisper.cpp transcript writes so output is generated to a temp JSON and atomically renamed after successful parsing. Missing models now throw an explicit error instead of leaving stale `whisper-cpp.json` output that looks current.
 
 ## In Progress
 - None.

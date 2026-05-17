@@ -120,17 +120,19 @@ export async function transcribeWithOpenAi(config, audioPath, options = {}) {
 export async function transcribeWithWhisperCpp(config, audioPath, options = {}) {
   const command = process.env.WHISPER_CPP_BIN || "/opt/homebrew/bin/whisper-cli";
   const model = options.model || process.env.WHISPER_CPP_MODEL || await getWhisperCppModelPath(config, options.modelSize || config.whisperModelSize);
+  await assertReadableModel(model, options.modelSize || config.whisperModelSize || "medium");
   const noGpu = shouldDisableWhisperCppGpu(config, options);
   const inputPath = await ensureWhisperCppAudio(config, audioPath);
   const outPath = transcriptOutputPathForAudio(config, audioPath, options.prompt ? `whisper-cpp-prompted-${promptHash(options.prompt)}.json` : "whisper-cpp.json");
   await fs.mkdir(path.dirname(outPath), { recursive: true });
-  const outputBase = outPath.replace(/\.json$/i, "");
+  const tempOutputBase = path.join(path.dirname(outPath), `.${path.basename(outPath, ".json")}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}`);
+  const tempOutPath = `${tempOutputBase}.json`;
   const args = [
     "-m", model,
     "-f", inputPath,
     "-oj",
     "-ojf",
-    "-of", outputBase,
+    "-of", tempOutputBase,
     "-np",
     "-l", "en"
   ];
@@ -140,25 +142,31 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
     if (options.carryInitialPrompt !== false) args.push("--carry-initial-prompt");
   }
   console.log(`[transcribeWithWhisperCpp] Running: ${command} ${args.join(" ")}`);
-  await run(command, args, { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
-  const raw = JSON.parse(await fs.readFile(outPath, "utf8"));
-  const segments = (raw.transcription || []).map((segment) => ({
-    start: whisperTimeToSeconds(segment.offsets?.from),
-    end: whisperTimeToSeconds(segment.offsets?.to),
-    text: segment.text || ""
-  }));
-  return {
-    source: "local_whisper_cpp",
-    text: segments.map((segment) => segment.text).join(" ").replace(/\s+/g, " ").trim(),
-    segments,
-    localPath: outPath,
-    model,
-    acceleration: {
-      backend: "whisper.cpp",
-      gpu: !noGpu
-    },
-    prompt: promptMetadata(options)
-  };
+  try {
+    await run(command, args, { timeoutMs: options.timeoutMs || 20 * 60 * 1000 });
+    const rawText = await fs.readFile(tempOutPath, "utf8");
+    const raw = JSON.parse(rawText);
+    await fs.rename(tempOutPath, outPath);
+    const segments = (raw.transcription || []).map((segment) => ({
+      start: whisperTimeToSeconds(segment.offsets?.from),
+      end: whisperTimeToSeconds(segment.offsets?.to),
+      text: segment.text || ""
+    }));
+    return {
+      source: "local_whisper_cpp",
+      text: segments.map((segment) => segment.text).join(" ").replace(/\s+/g, " ").trim(),
+      segments,
+      localPath: outPath,
+      model,
+      acceleration: {
+        backend: "whisper.cpp",
+        gpu: !noGpu
+      },
+      prompt: promptMetadata(options)
+    };
+  } finally {
+    await fs.rm(tempOutPath, { force: true }).catch(() => {});
+  }
 }
 
 function shouldDisableWhisperCppGpu(config, options = {}) {
@@ -209,6 +217,14 @@ async function getWhisperCppModelPath(config, size = "large-v3") {
     }
   }
   return candidates[0];
+}
+
+async function assertReadableModel(modelPath, requestedSize) {
+  try {
+    await fs.access(modelPath);
+  } catch {
+    throw new Error(`Whisper model is not installed for size "${requestedSize}": ${modelPath}. Download it or set WHISPER_MODEL_SIZE/WHISPER_CPP_MODEL to an installed model.`);
+  }
 }
 
 async function ensureWhisperCppAudio(config, audioPath) {
