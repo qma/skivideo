@@ -1,5 +1,5 @@
 import { buildRestFolderManifest } from "../adapters/sharepointRest.mjs";
-import { correlateFolderWithLiveTiming } from "../adapters/events.mjs";
+import { correlateFolderWithLiveTiming, finalizeLiveTimingCorrelation, resolveLiveTimingSelection } from "../adapters/events.mjs";
 
 export async function ensureFolderManifest(config, store, folderId) {
   if (!folderId) throw new Error("folderId is required.");
@@ -66,11 +66,54 @@ export async function ensureLiveTimingCorrelation(config, store, folderId, optio
     skipped: false,
     query: correlation.query,
     races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+    candidates: (correlation.liveTimingCandidates || []).map(serializeLiveTimingMatch),
+    selection: correlation.selection,
     candidateRoster: correlation.candidateRoster.length,
     tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
     assets: correlation.assets.length,
     search: correlation.search,
-    message: `Matched ${correlation.liveTimingMatches.length} Live-Timing race${correlation.liveTimingMatches.length === 1 ? "" : "s"}`
+    message: liveTimingMessage(correlation)
+  };
+}
+
+export async function confirmLiveTimingSelection(config, store, folderId, raceIds = []) {
+  if (!folderId) throw new Error("folderId is required.");
+  if (!Array.isArray(raceIds) || !raceIds.length) throw new Error("raceIds are required.");
+  if (raceIds.length > 2) throw new Error("Select at most two Live-Timing races.");
+  const state = await store.read();
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) throw new Error(`Folder not found: ${folderId}`);
+  const candidates = folder.eventMatch?.liveTimingCandidates || [];
+  const selected = raceIds.map((raceId) => {
+    const candidate = candidates.find((match) => String(match.raceId) === String(raceId));
+    if (!candidate) throw new Error(`Selected race is not a current candidate: ${raceId}`);
+    return { race: candidate, confidence: candidate.confidence || 1 };
+  });
+  const selection = resolveLiveTimingSelection(selected);
+  if (selection.status !== "auto_confirmed") throw new Error(selection.reason || "Selected races must include at most one Men and one Women race.");
+  const correlation = await finalizeLiveTimingCorrelation(config, folder, {
+    query: folder.eventMatch?.liveTimingCorrelation?.query || "",
+    search: liveTimingSearchFromFolder(folder),
+    daily: null,
+    liveTimingMatches: selected,
+    liveTimingCandidates: candidates.map((candidate) => ({ race: candidate, confidence: candidate.confidence || 0 })),
+    selection: {
+      status: "admin_confirmed",
+      reason: "Admin selected Live-Timing races",
+      matches: selected,
+      candidates
+    }
+  });
+  await store.updateFolder(folderId, liveTimingPatch(folder, correlation));
+  return {
+    ok: true,
+    folderId,
+    races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+    candidateRoster: correlation.candidateRoster.length,
+    tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
+    assets: correlation.assets.length,
+    selection: correlation.selection,
+    message: `Confirmed ${correlation.liveTimingMatches.length} Live-Timing race${correlation.liveTimingMatches.length === 1 ? "" : "s"}`
   };
 }
 
@@ -81,6 +124,10 @@ export function hasLiveTimingCorrelation(folder) {
     || folder?.candidateRoster?.length
     || folder?.raceAssets?.length
   );
+}
+
+export function needsLiveTimingSelection(folder) {
+  return folder?.eventMatch?.liveTimingSelection?.status === "needs_admin_selection";
 }
 
 export function serializeLiveTimingMatch(match) {
@@ -97,6 +144,8 @@ export function serializeLiveTimingMatch(match) {
 }
 
 function liveTimingPatch(folder, correlation) {
+  const serializedCandidates = (correlation.liveTimingCandidates || []).map(serializeLiveTimingMatch);
+  const selection = correlation.selection || {};
   return {
     candidateRoster: correlation.candidateRoster,
     raceAssets: correlation.assets,
@@ -104,14 +153,39 @@ function liveTimingPatch(folder, correlation) {
       ...(folder.eventMatch || {}),
       liveTimingMatch: correlation.liveTimingMatches[0] ? serializeLiveTimingMatch(correlation.liveTimingMatches[0]) : null,
       liveTimingMatches: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
+      liveTimingCandidates: serializedCandidates,
       liveTimingCorrelation: {
         method: "daily_archive_folder_score_v1",
         query: correlation.query,
         matchedAt: new Date().toISOString(),
-        matchCount: correlation.liveTimingMatches.length
+        matchCount: correlation.liveTimingMatches.length,
+        candidateCount: serializedCandidates.length,
+        selectionStatus: selection.status || "",
+        selectionReason: selection.reason || ""
       },
-      sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
+      liveTimingSelection: {
+        status: selection.status || "",
+        reason: selection.reason || "",
+        candidates: serializedCandidates
+      },
+      sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search?.sourceUrl].filter(Boolean))]
     }
+  };
+}
+
+function liveTimingMessage(correlation) {
+  if (correlation.selection?.status === "needs_admin_selection") {
+    return `Needs admin selection: ${correlation.liveTimingCandidates.length} Live-Timing candidate races`;
+  }
+  return `Matched ${correlation.liveTimingMatches.length} Live-Timing race${correlation.liveTimingMatches.length === 1 ? "" : "s"}`;
+}
+
+function liveTimingSearchFromFolder(folder) {
+  const asset = (folder.raceAssets || []).find((item) => item.type === "live_timing_search");
+  return {
+    sourceUrl: asset?.sourceUrl || "",
+    rawPath: asset?.localPath || "",
+    assets: []
   };
 }
 

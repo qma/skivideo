@@ -1,5 +1,5 @@
 import { nowIso, stableId } from "../lib/ids.mjs";
-import { ensureFolderManifest, ensureLiveTimingCorrelation } from "./eventDependencies.mjs";
+import { ensureFolderManifest, ensureLiveTimingCorrelation, needsLiveTimingSelection } from "./eventDependencies.mjs";
 import { cacheTranscript, mirrorVideo, extractAudio } from "../adapters/media.mjs";
 import { transcribeAudio } from "../adapters/transcription.mjs";
 import { labelVideoAthletes } from "./labeler.mjs";
@@ -52,6 +52,18 @@ export async function processFolder(config, store, folderId, options = {}) {
 
   state = await store.read();
   folder = state.folders.find((item) => item.id === folderId);
+  if (needsLiveTimingSelection(folder)) {
+    await store.updateJob(jobId, {
+      status: "completed_with_errors",
+      message: "Live-Timing candidate races require admin confirmation before media processing.",
+      completedAt: nowIso(),
+      indexed: 0,
+      needsReview: 0,
+      failed: 0,
+      parallel
+    });
+    return { jobId, indexed: 0, needsReview: 0, failed: 0, parallel, videos: 0, needsLiveTimingSelection: true };
+  }
   let videos = state.videos.filter((video) => video.folderId === folderId);
   if (!videos.length) {
     await store.updateJob(jobId, {

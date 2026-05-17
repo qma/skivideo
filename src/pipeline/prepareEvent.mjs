@@ -1,5 +1,5 @@
 import { buildRestFolderManifest } from "../adapters/sharepointRest.mjs";
-import { ensureFolderManifest, ensureLiveTimingCorrelation } from "./eventDependencies.mjs";
+import { ensureFolderManifest, ensureLiveTimingCorrelation, needsLiveTimingSelection } from "./eventDependencies.mjs";
 import { relabelFolder } from "./processFolder.mjs";
 
 export async function prepareEventFolder(config, store, input = {}) {
@@ -26,6 +26,25 @@ export async function prepareEventFolder(config, store, input = {}) {
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
 
   const correlation = await ensureLiveTimingCorrelation(config, store, folderId);
+  const afterCorrelation = await store.read();
+  const correlatedFolder = afterCorrelation.folders.find((item) => item.id === folderId);
+  if (needsLiveTimingSelection(correlatedFolder)) {
+    return {
+      ok: true,
+      folderId,
+      manifest: manifestSummary || manifest,
+      query: correlation.query || "",
+      races: correlation.races || [],
+      candidates: correlation.candidates || correlatedFolder?.eventMatch?.liveTimingCandidates || [],
+      selection: correlation.selection || correlatedFolder?.eventMatch?.liveTimingSelection,
+      candidateRoster: 0,
+      tptRoster: 0,
+      assets: correlation.assets,
+      liveTimingSkipped: Boolean(correlation.skipped),
+      relabel: null,
+      message: "Live-Timing candidate races require admin confirmation before relabeling."
+    };
+  }
   const relabel = await relabelFolder(config, store, folderId);
 
   return {

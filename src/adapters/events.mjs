@@ -117,7 +117,28 @@ export async function correlateFolderWithLiveTiming(config, folder) {
   ].filter(Boolean).join(" ");
   const search = await fetchLiveTimingSearch(config, query);
   const daily = folder.eventMatch?.date ? await fetchLiveTimingDailyRaces(config, folder.eventMatch.date) : null;
-  const liveTimingMatches = daily ? matchFolderToLiveTimingRaces(folder, daily.races) : [];
+  const liveTimingCandidates = daily ? matchFolderToLiveTimingRaceCandidates(folder, daily.races) : [];
+  const selection = resolveLiveTimingSelection(liveTimingCandidates);
+  const liveTimingMatches = selection.status === "auto_confirmed" ? selection.matches : [];
+  return finalizeLiveTimingCorrelation(config, folder, {
+    query,
+    search,
+    daily,
+    liveTimingMatches,
+    liveTimingCandidates,
+    selection
+  });
+}
+
+export async function finalizeLiveTimingCorrelation(config, folder, input) {
+  const {
+    query = "",
+    search,
+    daily = null,
+    liveTimingMatches = [],
+    liveTimingCandidates = liveTimingMatches,
+    selection = { status: "auto_confirmed", matches: liveTimingMatches, reason: "" }
+  } = input;
   const raceData = [];
   for (const match of liveTimingMatches) {
     try {
@@ -147,14 +168,14 @@ export async function correlateFolderWithLiveTiming(config, folder) {
       localPath: data?.rawPath || "",
       error: error || undefined
     },
-    ...match.race.reports
+    ...(match.race.reports || [])
   ]);
   const assets = [
     {
       type: "live_timing_search",
       label: `Live-Timing search: ${query}`,
-      sourceUrl: search.sourceUrl,
-      localPath: search.rawPath
+      sourceUrl: search?.sourceUrl || "",
+      localPath: search?.rawPath || ""
     },
     ...(daily ? [{
       type: "live_timing_daily_archive",
@@ -163,13 +184,15 @@ export async function correlateFolderWithLiveTiming(config, folder) {
       localPath: daily.rawPath
     }] : []),
     ...raceAssets,
-    ...search.assets.filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
+    ...(search?.assets || []).filter((asset) => !/^Races$|^Split Second$/i.test(asset.label))
   ];
   return {
     query,
     assets,
     candidateRoster,
     liveTimingMatches,
+    liveTimingCandidates,
+    selection,
     daily,
     search
   };
@@ -275,17 +298,69 @@ export function matchFolderToLiveTimingRace(folder, races) {
 }
 
 export function matchFolderToLiveTimingRaces(folder, races, options = {}) {
+  const candidates = matchFolderToLiveTimingRaceCandidates(folder, races);
   const includeSiblingGenders = options.includeSiblingGenders !== false;
+  if (!candidates.length) return [];
+  if (includeSiblingGenders) {
+    const selection = resolveLiveTimingSelection(candidates);
+    return selection.status === "auto_confirmed" ? selection.matches : candidates;
+  }
+  return [candidates[0]];
+}
+
+export function matchFolderToLiveTimingRaceCandidates(folder, races) {
   const scored = races
     .map((race) => ({ race, confidence: Number(scoreFolderLiveTimingRace(folder, race).toFixed(2)) }))
     .filter((match) => match.confidence >= 0.55)
-    .sort((a, b) => b.confidence - a.confidence || String(a.race.gender).localeCompare(String(b.race.gender)));
+    .sort(compareLiveTimingMatches);
   if (!scored.length) return [];
-  if (includeSiblingGenders) {
-    const best = scored[0].confidence;
-    return scored.filter((match) => best - match.confidence <= 0.12);
+  const best = scored[0].confidence;
+  return scored.filter((match) => best - match.confidence <= 0.12);
+}
+
+export function resolveLiveTimingSelection(candidates = []) {
+  const matches = [];
+  const genders = new Set();
+  for (const candidate of candidates) {
+    const gender = normalizedRaceGender(candidate.race?.gender || candidate.gender);
+    if (!gender || genders.has(gender)) {
+      return {
+        status: candidates.length ? "needs_admin_selection" : "no_candidates",
+        reason: gender ? `Multiple ${gender} candidates matched` : "Candidate race has no gender",
+        matches: [],
+        candidates
+      };
+    }
+    genders.add(gender);
+    matches.push(candidate);
   }
-  return [scored[0]];
+  if (matches.length > 2) {
+    return {
+      status: "needs_admin_selection",
+      reason: "More than two Live-Timing races matched",
+      matches: [],
+      candidates
+    };
+  }
+  return {
+    status: "auto_confirmed",
+    reason: matches.length ? "At most one Men race and one Women race matched" : "No Live-Timing candidates matched",
+    matches,
+    candidates
+  };
+}
+
+function compareLiveTimingMatches(a, b) {
+  return b.confidence - a.confidence
+    || String(a.race.gender).localeCompare(String(b.race.gender))
+    || String(a.race.raceId).localeCompare(String(b.race.raceId));
+}
+
+function normalizedRaceGender(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.startsWith("men") || text === "m") return "Men";
+  if (text.startsWith("women") || text === "w" || text.startsWith("lad")) return "Women";
+  return String(value || "").trim();
 }
 
 export function parseRosterFromText(text, sourceUrl = "") {

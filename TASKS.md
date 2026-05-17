@@ -127,6 +127,7 @@
 - [codex] Replaced always-mounted event/search row video players with lightweight preview buttons; local media loads only after clicking into the preview dialog, and source-only videos open their SharePoint link.
 - [codex] Updated preview behavior so source SharePoint videos use the same lazy dialog player as local cached videos.
 - [codex] Replaced the event-list Delete action with Reset, which clears event videos, labels, transcripts, jobs, Live-Timing metadata, roster/assets, and derived index data while preserving the discovered source folder.
+- [codex] Added Live-Timing admin confirmation for ambiguous matches: auto-apply only at most one Men and one Women race, otherwise store candidates and block relabel/process until an admin confirms the actual races.
 
 ## In Progress
 - None.

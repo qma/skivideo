@@ -5,9 +5,10 @@ import { auditPublicLeanStore, JsonStore } from "./lib/fsStore.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
-import { correlateFolderWithLiveTiming, fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingRaceData, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
+import { fetchFarWestU14Events, fetchLiveTimingDailyRaces, fetchLiveTimingRaceData, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, processVideo, relabelFolder } from "./pipeline/processFolder.mjs";
 import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
+import { ensureLiveTimingCorrelation } from "./pipeline/eventDependencies.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -139,26 +140,15 @@ async function fetchLiveTimingRace(raceId) {
 
 async function correlateFolderLiveTiming(folderId) {
   if (!folderId) throw new Error("Folder id is required.");
-  const state = await store.read();
-  const folder = state.folders.find((item) => item.id === folderId);
-  if (!folder) throw new Error(`Folder not found: ${folderId}`);
-  const correlation = await correlateFolderWithLiveTiming(config, folder);
-  await store.updateFolder(folderId, {
-    candidateRoster: correlation.candidateRoster,
-    raceAssets: correlation.assets,
-    eventMatch: {
-      ...(folder.eventMatch || {}),
-      liveTimingMatch: correlation.liveTimingMatches[0] ? serializeLiveTimingMatch(correlation.liveTimingMatches[0]) : null,
-      liveTimingMatches: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
-      sources: [...new Set([...(folder.eventMatch?.sources || []), correlation.search.sourceUrl])]
-    }
-  });
+  const correlation = await ensureLiveTimingCorrelation(config, store, folderId, { force: true });
   printJson({
     folderId,
     query: correlation.query,
-    races: correlation.liveTimingMatches.map(serializeLiveTimingMatch),
-    candidateRoster: correlation.candidateRoster.length,
-    tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
+    races: correlation.races,
+    candidates: correlation.candidates,
+    selection: correlation.selection,
+    candidateRoster: correlation.candidateRoster,
+    tptRoster: correlation.tptRoster,
     assets: correlation.assets
   });
 }

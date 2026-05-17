@@ -10,7 +10,7 @@ import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } f
 import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
 import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
-import { ensureFolderManifest, ensureLiveTimingCorrelation } from "./pipeline/eventDependencies.mjs";
+import { confirmLiveTimingSelection, ensureFolderManifest, ensureLiveTimingCorrelation } from "./pipeline/eventDependencies.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -54,11 +54,16 @@ app.post("/api/correlate-folder-live-timing", asyncRoute(async (req) => {
     folderId: req.body.folderId,
     query: correlation.query,
     races: correlation.races,
+    candidates: correlation.candidates,
+    selection: correlation.selection,
     candidateRoster: correlation.candidateRoster,
     tptRoster: correlation.tptRoster,
     assets: correlation.assets
   };
 }));
+app.post("/api/confirm-live-timing", asyncRoute(async (req) => (
+  confirmLiveTimingSelection(config, store, req.body.folderId, req.body.raceIds || [])
+)));
 app.post("/api/list-sharepoint", asyncRoute(async () => {
   const folders = await listRootEventFolders(config);
   await store.upsertFolders(folders);

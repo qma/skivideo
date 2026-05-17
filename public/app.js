@@ -76,6 +76,11 @@ function bindActions() {
   });
   el("bulkMarkIndexed").addEventListener("click", () => bulkAction("mark-indexed"));
   el("bulkClearLabels").addEventListener("click", () => bulkAction("clear-labels"));
+  el("liveTimingSelection").addEventListener("click", (event) => {
+    const submit = event.target.closest("[data-confirm-live-timing]");
+    if (!submit) return;
+    confirmLiveTimingMatches();
+  });
   el("eventViewPanel").addEventListener("click", async (event) => {
     const save = event.target.closest("[data-manual-label]");
     const clear = event.target.closest("[data-clear-labels]");
@@ -142,7 +147,7 @@ function renderFolders() {
         </div>
         <div class="eventName">
           <strong>${escapeHtml(folder.name)}</strong>
-          <span>${escapeHtml([event?.venue, folder.raceAssetCount ? `${folder.raceAssetCount} assets` : "", folder.candidateRosterCount ? `${folder.candidateRosterCount} racers` : ""].filter(Boolean).join(" · "))}</span>
+          <span>${escapeHtml([event?.venue, event?.liveTimingSelection?.status === "needs_admin_selection" ? "Live-Timing needs confirmation" : "", folder.raceAssetCount ? `${folder.raceAssetCount} assets` : "", folder.candidateRosterCount ? `${folder.candidateRosterCount} racers` : ""].filter(Boolean).join(" · "))}</span>
         </div>
         <div>
           <span class="statusBadge ${status.className}">${escapeHtml(status.label)}</span>
@@ -202,6 +207,7 @@ function renderEventView() {
     failed ? `${failed} failed` : "",
     folder.candidateRoster?.length ? `${folder.candidateRoster.length} racers` : ""
   ].filter(Boolean).join(" · ");
+  renderLiveTimingSelection(folder);
   el("eventAssets").innerHTML = (folder.raceAssets || []).slice(0, 10).map((asset) => `
     <a class="assetLink" href="${escapeAttr(asset.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(asset.label || asset.type)}</a>
   `).join("");
@@ -243,6 +249,37 @@ function renderEventView() {
   }).join("") || `<tr><td colspan="7" class="muted">No videos in this event.</td></tr>`;
 }
 
+function renderLiveTimingSelection(folder) {
+  const container = el("liveTimingSelection");
+  const selection = folder.eventMatch?.liveTimingSelection;
+  const candidates = selection?.candidates || folder.eventMatch?.liveTimingCandidates || [];
+  if (selection?.status !== "needs_admin_selection" || !candidates.length) {
+    container.innerHTML = "";
+    container.hidden = true;
+    return;
+  }
+  container.hidden = false;
+  container.innerHTML = `
+    <div class="liveTimingSelectionHeader">
+      <strong>Confirm Live-Timing Matches</strong>
+      <span>${escapeHtml(selection.reason || "Multiple candidate races matched. Select at most one Men and one Women race.")}</span>
+    </div>
+    <div class="liveTimingCandidateGrid">
+      ${candidates.map((race) => `
+        <label class="liveTimingCandidate">
+          <input type="checkbox" value="${escapeAttr(race.raceId)}" data-live-timing-race>
+          <span>
+            <strong>${escapeHtml([race.gender, race.type].filter(Boolean).join(" · "))}</strong>
+            <span>${escapeHtml(race.name || "")}</span>
+            <span>${escapeHtml([race.resort, race.date, `${Math.round((race.confidence || 0) * 100)}%`].filter(Boolean).join(" · "))}</span>
+          </span>
+        </label>
+      `).join("")}
+    </div>
+    <button class="actionLink" type="button" data-confirm-live-timing>Confirm Selection</button>
+  `;
+}
+
 function compareFoldersChronologically(a, b) {
   return folderSortKey(a).localeCompare(folderSortKey(b)) || String(a.name).localeCompare(String(b.name));
 }
@@ -260,6 +297,9 @@ function eventProcessingStatus(folder) {
   const stats = folder.stats || {};
   const total = stats.videoCount || 0;
   if (!total) return { label: "Discovered", className: "statusDiscovered" };
+  if (folder.eventMatch?.liveTimingSelection?.status === "needs_admin_selection") {
+    return { label: "Needs Live", className: "statusPrepared" };
+  }
   if (stats.failed) return { label: "Has failures", className: "statusFailed" };
   if ((stats.indexed || 0) + (stats.needsReview || 0) >= total) {
     return stats.needsReview
@@ -419,6 +459,25 @@ async function bulkAction(actionName) {
   const confirmed = window.confirm(`${label} for "${name}"?`);
   if (!confirmed) return;
   await action("/api/bulk-review", { folderId: state.selectedFolderId, action: actionName }, { silent: true });
+}
+
+async function confirmLiveTimingMatches() {
+  if (!state.selectedFolderId) return;
+  const checked = [...document.querySelectorAll("[data-live-timing-race]:checked")];
+  const raceIds = checked.map((input) => input.value);
+  if (!raceIds.length) {
+    showLog({ error: "Select one or two Live-Timing races." });
+    return;
+  }
+  if (raceIds.length > 2) {
+    showLog({ error: "Select at most two races: one Men and one Women." });
+    return;
+  }
+  const result = await action("/api/confirm-live-timing", { folderId: state.selectedFolderId, raceIds }, { silent: true });
+  if (!result?.ok) return;
+  showLog(result);
+  state.eventDetail = await api(`/api/event?folderId=${encodeURIComponent(state.selectedFolderId)}`);
+  renderEventView();
 }
 
 async function startProcessing(folderId) {
