@@ -257,12 +257,12 @@ function eventProcessingStatus(folder) {
   const total = stats.videoCount || 0;
   if (!total) return { label: "Discovered", className: "statusDiscovered" };
   if (stats.failed) return { label: "Has failures", className: "statusFailed" };
-  if ((stats.localVideo || 0) >= total && (stats.indexed || 0) + (stats.needsReview || 0) >= total) {
+  if ((stats.indexed || 0) + (stats.needsReview || 0) >= total) {
     return stats.needsReview
       ? { label: "Processed + review", className: "statusReview" }
       : { label: "Processed", className: "statusProcessed" };
   }
-  if ((stats.indexed || 0) + (stats.needsReview || 0) >= total) {
+  if ((stats.localVideo || 0) || (stats.transcripts || 0) || (stats.labels || 0)) {
     return { label: "Prepared", className: "statusPrepared" };
   }
   return { label: "Pending", className: "statusPending" };

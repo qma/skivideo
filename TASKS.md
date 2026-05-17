@@ -123,6 +123,7 @@
 - [gemini] Made Whisper model size and backend configurable, defaulting to `large-v3` for higher accuracy. The system now honors `WHISPER_MODEL_SIZE` and `WHISPER_BACKEND` environment variables, while maintaining `whisper.cpp` as the primary default and supporting Metal/GPU acceleration.
 - [codex] Refactored the local cache layout so media, audio, and transcript artifacts mirror the SharePoint team folder under `data/{media,audio,transcripts}/TPT U14 2025-2026/`; added `scripts/migrate-cache-layout.mjs` for repeatable migration/cleanup.
 - [codex] Migrated the local metadata/cache to the mirrored layout and validated 823 video records with 0 stale local refs and 0 missing referenced local files.
+- [codex] Fixed event list status badges so `Processed`/`Processed + review` are based on processing completion, while local media availability remains a separate count.
 
 ## In Progress
 - None.
