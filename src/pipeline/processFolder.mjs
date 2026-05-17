@@ -38,18 +38,8 @@ export async function processFolder(config, store, folderId, options = {}) {
     });
   }
   const liveTiming = await ensureLiveTimingCorrelation(config, store, folderId);
-  if (!liveTiming.skipped) {
-    await store.updateJob(jobId, {
-      message: `${liveTiming.message}; starting media processing`,
-      parallel
-    });
-  } else {
-    await store.updateJob(jobId, {
-      message: "Dependencies ready; starting media processing",
-      parallel
-    });
-  }
 
+  // Check if admin selection is required before proceeding to media processing
   state = await store.read();
   folder = state.folders.find((item) => item.id === folderId);
   if (needsLiveTimingSelection(folder)) {
@@ -64,6 +54,21 @@ export async function processFolder(config, store, folderId, options = {}) {
     });
     return { jobId, indexed: 0, needsReview: 0, failed: 0, parallel, videos: 0, needsLiveTimingSelection: true };
   }
+
+  if (!liveTiming.skipped) {
+    await store.updateJob(jobId, {
+      message: `${liveTiming.message}; starting media processing`,
+      parallel
+    });
+  } else {
+    await store.updateJob(jobId, {
+      message: "Dependencies ready; starting media processing",
+      parallel
+    });
+  }
+
+  state = await store.read();
+  folder = state.folders.find((item) => item.id === folderId);
   let videos = state.videos.filter((video) => video.folderId === folderId);
   if (!videos.length) {
     await store.updateJob(jobId, {

@@ -117,9 +117,41 @@ export async function confirmLiveTimingSelection(config, store, folderId, raceId
   };
 }
 
+export async function confirmNoLiveTiming(config, store, folderId) {
+  if (!folderId) throw new Error("folderId is required.");
+  const state = await store.read();
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) throw new Error(`Folder not found: ${folderId}`);
+  const correlation = await finalizeLiveTimingCorrelation(config, folder, {
+    query: folder.eventMatch?.liveTimingCorrelation?.query || "",
+    search: liveTimingSearchFromFolder(folder),
+    daily: null,
+    liveTimingMatches: [],
+    liveTimingCandidates: (folder.eventMatch?.liveTimingCandidates || []).map((candidate) => ({ race: candidate, confidence: candidate.confidence || 0 })),
+    selection: {
+      status: "admin_confirmed_none",
+      reason: "Admin confirmed no Live-Timing match",
+      matches: [],
+      candidates: folder.eventMatch?.liveTimingCandidates || []
+    }
+  });
+  await store.updateFolder(folderId, liveTimingPatch(folder, correlation));
+  return {
+    ok: true,
+    folderId,
+    races: [],
+    candidateRoster: 0,
+    tptRoster: 0,
+    assets: correlation.assets.length,
+    selection: correlation.selection,
+    message: "Confirmed no Live-Timing match for this event"
+  };
+}
+
 export function hasLiveTimingCorrelation(folder) {
   return Boolean(
-    folder?.eventMatch?.liveTimingMatches?.length
+    folder?.eventMatch?.liveTimingSelection?.status === "admin_confirmed_none"
+    || folder?.eventMatch?.liveTimingMatches?.length
     || folder?.eventMatch?.liveTimingMatch
     || folder?.candidateRoster?.length
     || folder?.raceAssets?.length
@@ -127,7 +159,8 @@ export function hasLiveTimingCorrelation(folder) {
 }
 
 export function needsLiveTimingSelection(folder) {
-  return folder?.eventMatch?.liveTimingSelection?.status === "needs_admin_selection";
+  const status = folder?.eventMatch?.liveTimingSelection?.status;
+  return status === "needs_admin_selection";
 }
 
 export function serializeLiveTimingMatch(match) {

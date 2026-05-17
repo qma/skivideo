@@ -10,7 +10,7 @@ import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } f
 import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
 import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
 import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
-import { confirmLiveTimingSelection, ensureFolderManifest, ensureLiveTimingCorrelation } from "./pipeline/eventDependencies.mjs";
+import { confirmLiveTimingSelection, confirmNoLiveTiming, ensureFolderManifest, ensureLiveTimingCorrelation } from "./pipeline/eventDependencies.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
@@ -63,6 +63,15 @@ app.post("/api/correlate-folder-live-timing", asyncRoute(async (req) => {
 }));
 app.post("/api/confirm-live-timing", asyncRoute(async (req) => {
   const confirmation = await confirmLiveTimingSelection(config, store, req.body.folderId, req.body.raceIds || []);
+  const relabel = await relabelFolder(config, store, req.body.folderId);
+  return {
+    ...confirmation,
+    relabel,
+    message: `${confirmation.message}; recalculated ${relabel.indexed} indexed and ${relabel.needsReview} review label status${relabel.videos === 1 ? "" : "es"}`
+  };
+}));
+app.post("/api/confirm-no-live-timing", asyncRoute(async (req) => {
+  const confirmation = await confirmNoLiveTiming(config, store, req.body.folderId);
   const relabel = await relabelFolder(config, store, req.body.folderId);
   return {
     ...confirmation,

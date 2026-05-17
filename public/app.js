@@ -78,8 +78,9 @@ function bindActions() {
   el("bulkClearLabels").addEventListener("click", () => bulkAction("clear-labels"));
   el("liveTimingSelection").addEventListener("click", (event) => {
     const submit = event.target.closest("[data-confirm-live-timing]");
-    if (!submit) return;
-    confirmLiveTimingMatches();
+    const skip = event.target.closest("[data-confirm-no-live-timing]");
+    if (submit) confirmLiveTimingMatches();
+    if (skip) confirmNoLiveTiming();
   });
   el("eventViewPanel").addEventListener("click", async (event) => {
     const save = event.target.closest("[data-manual-label]");
@@ -266,17 +267,23 @@ function renderLiveTimingSelection(folder) {
     </div>
     <div class="liveTimingCandidateGrid">
       ${candidates.map((race) => `
-        <label class="liveTimingCandidate">
-          <input type="checkbox" value="${escapeAttr(race.raceId)}" data-live-timing-race>
-          <span>
-            <strong>${escapeHtml([race.gender, race.type].filter(Boolean).join(" · "))}</strong>
-            <span>${escapeHtml(race.name || "")}</span>
-            <span>${escapeHtml([race.resort, race.date, `${Math.round((race.confidence || 0) * 100)}%`].filter(Boolean).join(" · "))}</span>
-          </span>
-        </label>
+        <div class="liveTimingCandidateWrapper">
+          <label class="liveTimingCandidate">
+            <input type="checkbox" value="${escapeAttr(race.raceId)}" data-live-timing-race>
+            <span>
+              <strong>${escapeHtml([race.gender, race.type].filter(Boolean).join(" · "))}</strong>
+              <span>${escapeHtml(race.name || "")}</span>
+              <span>${escapeHtml([race.resort, race.date, `${Math.round((race.confidence || 0) * 100)}%`].filter(Boolean).join(" · "))}</span>
+            </span>
+          </label>
+          ${race.sourceUrl ? `<a href="${escapeAttr(race.sourceUrl)}" class="candidateLink" target="_blank" rel="noreferrer" title="Open Live-Timing race report">Live ↗</a>` : ""}
+        </div>
       `).join("")}
     </div>
-    <button class="actionLink" type="button" data-confirm-live-timing>Confirm Selection</button>
+    <div class="actions">
+      <button class="actionLink" type="button" data-confirm-live-timing>Confirm Selection</button>
+      <button class="actionLink subtleActionLink" type="button" data-confirm-no-live-timing>Confirm No Live-Timing</button>
+    </div>
   `;
 }
 
@@ -474,6 +481,16 @@ async function confirmLiveTimingMatches() {
     return;
   }
   const result = await action("/api/confirm-live-timing", { folderId: state.selectedFolderId, raceIds }, { silent: true });
+  if (!result?.ok) return;
+  showLog(result);
+  state.eventDetail = await api(`/api/event?folderId=${encodeURIComponent(state.selectedFolderId)}`);
+  renderEventView();
+}
+
+async function confirmNoLiveTiming() {
+  if (!state.selectedFolderId) return;
+  if (!confirm("Are you sure this event has no Live-Timing match? This will continue using only filenames and transcripts for athlete labeling.")) return;
+  const result = await action("/api/confirm-no-live-timing", { folderId: state.selectedFolderId }, { silent: true });
   if (!result?.ok) return;
   showLog(result);
   state.eventDetail = await api(`/api/event?folderId=${encodeURIComponent(state.selectedFolderId)}`);
