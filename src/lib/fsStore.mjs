@@ -276,6 +276,7 @@ export function buildLeanStore(store) {
         text: snippet(video.transcript.text, 500),
         segments: []
       } : { source: "unavailable", text: "", segments: [] },
+      goldenLabel: video.goldenLabel || null,
       athleteLabels: video.athleteLabels || [],
       processing: video.processing || {}
     }))
@@ -301,7 +302,7 @@ export function buildPublicLeanStore(store) {
     current.publishedVideos += 1;
     if (video.processing.status === "indexed") current.indexedVideos += 1;
     if (video.processing.status === "needs_review") current.reviewVideos += 1;
-    if (video.athleteLabels.length) current.labeledVideos += 1;
+    if (video.goldenLabel || video.athleteLabels.length) current.labeledVideos += 1;
     folderStats.set(video.folderId, current);
   }
   return {
@@ -384,6 +385,7 @@ function sanitizePublicVideo(video, publicSharepointUrl = "") {
     timeLastModified: video.timeLastModified || "",
     transcript: sanitizePublicTranscript(video.transcript),
     transcriptRef: sanitizePublicTranscriptRef(video.transcriptRef),
+    goldenLabel: video.goldenLabel ? sanitizePublicLabel(video.goldenLabel) : null,
     athleteLabels: (video.athleteLabels || []).map(sanitizePublicLabel),
     processing: {
       status: video.processing?.status || "pending",

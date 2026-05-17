@@ -11,6 +11,8 @@ npm start
 
 Then open `http://localhost:4173`.
 
+For backend development with automatic restart on source edits, use `npm run dev`.
+
 The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_PLAN.md](docs/DESIGN_AND_IMPLEMENTATION_PLAN.md). The publishing, admin, auth, and multi-team roadmap lives in [docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md](docs/PUBLISHING_AND_MULTI_TEAM_ROADMAP.md). The Phase 1 static public export and deployment guide lives in [docs/PHASE1_STATIC_PUBLIC_EXPORT.md](docs/PHASE1_STATIC_PUBLIC_EXPORT.md).
 
 ## Current Capabilities
@@ -32,7 +34,7 @@ The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_
 - OpenAI transcription and labeler hooks as optional fallbacks when `OPENAI_API_KEY` is available.
 - Event detail view with status/confidence filters, event-local search, Live-Timing assets, app playback links, source SharePoint links, and embedded local video players.
 - Event list actions are ordered by dependency with mouse-over tooltips: `View` ensures the SharePoint video list and opens the event table, `Live` refreshes race correlation, `Prepare` runs View/Live dependencies plus metadata relabeling, `Process` runs all dependencies before download/transcription/indexing with four workers by default, and `Re-Process` confirms before forced retranscription/relabeling from local media only.
-- Event review controls for manual athlete correction and label clearing without media downloads.
+- Event review controls for roster-autocompleted golden athlete labels without media downloads. Golden labels are stored separately from model predictions and preferred for display/search.
 - Lazy web loading: startup reads `/api/summary`, selected events read `/api/event?folderId=...`, and global search reads `/api/search` instead of loading the full store into the browser.
 - Background processing from the web UI returns immediately and the Jobs panel refreshes while processing is running, so progress is visible without waiting on a single long HTTP response.
 - Jobs are color-coded by status and each job has an Inspect link backed by `/api/job`, with persisted progress logs available during and after processing.

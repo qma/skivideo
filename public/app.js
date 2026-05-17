@@ -85,16 +85,16 @@ function bindActions() {
   });
   el("eventViewPanel").addEventListener("click", async (event) => {
     const save = event.target.closest("[data-manual-label]");
-    const clear = event.target.closest("[data-clear-labels]");
+    const clear = event.target.closest("[data-clear-golden-label]");
     if (!save && !clear) return;
-    const videoId = (save || clear).dataset.manualLabel || (save || clear).dataset.clearLabels;
+    const videoId = (save || clear).dataset.manualLabel || (save || clear).dataset.clearGoldenLabel;
     if (save) {
       const input = document.querySelector(`[data-manual-input="${CSS.escape(videoId)}"]`);
       const labelName = input?.value.trim();
       if (!labelName) return;
       await action("/api/review-video", { action: "manual-label", videoId, labelName }, { silent: true });
     } else {
-      await action("/api/review-video", { action: "clear-labels", videoId }, { silent: true });
+      await action("/api/review-video", { action: "clear-golden-label", videoId }, { silent: true });
     }
   });
   el("searchInput").addEventListener("input", async (event) => {
@@ -210,13 +210,18 @@ function renderEventView() {
     failed ? `${failed} failed` : "",
     folder.candidateRoster?.length ? `${folder.candidateRoster.length} racers` : ""
   ].filter(Boolean).join(" · ");
+  el("eventRosterNames").innerHTML = rosterNames(folder).map((name) => `
+    <option value="${escapeAttr(name)}"></option>
+  `).join("");
   renderLiveTimingSelection(folder);
   el("eventAssets").innerHTML = (folder.raceAssets || []).slice(0, 10).map((asset) => `
     <a class="assetLink" href="${escapeAttr(asset.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(asset.label || asset.type)}</a>
   `).join("");
   el("eventVideoRows").innerHTML = videos.map((video) => {
-    const labels = video.athleteLabels || [];
-    const best = labels[0];
+    const predictionLabels = video.athleteLabels || [];
+    const labels = finalLabels(video);
+    const best = finalLabel(video);
+    const debugLabel = predictionLabels[0];
     const status = video.processing?.status || "pending";
     return `
       <tr>
@@ -230,25 +235,26 @@ function renderEventView() {
         </td>
         <td>${labels.length ? labels.map((label) => {
           const tooltip = [
+            label.source === "golden_review" ? "Golden label: manually reviewed final answer" : "Prediction",
             label.thought ? `LLM Thought: ${label.thought}` : "",
             label.evidence ? `Evidence: "${label.evidence}"` : "",
             label.debug ? `Debug: ${label.debug}` : ""
           ].filter(Boolean).join("\n\n");
           return `
-            <span class="labelStack ${label.confidence >= 0.65 ? "confident" : "ambiguous"}" title="${escapeAttr(tooltip)}">
+            <span class="labelStack ${label.source === "golden_review" ? "golden" : label.confidence >= 0.65 ? "confident" : "ambiguous"}" title="${escapeAttr(tooltip)}">
               ${escapeHtml(label.name)}
-              <span>${Math.round((label.confidence || 0) * 100)}%${label.thought ? " ✨" : ""}</span>
+              <span>${label.source === "golden_review" ? "Golden" : `${Math.round((label.confidence || 0) * 100)}%${label.thought ? " *" : ""}`}</span>
             </span>
           `;
         }).join("") : `<span class="muted">Unlabeled</span>`}</td>
         <td><span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span></td>
-        <td class="labelDebugCell">${renderLabelDebug(video.labelDebug, best)}</td>
+        <td class="labelDebugCell">${renderLabelDebug(video.labelDebug, debugLabel || best)}</td>
         <td class="transcriptCell">${escapeHtml(video.transcript?.text || "")}</td>
         <td>
           <div class="reviewTools">
-            <input data-manual-input="${escapeAttr(video.id)}" placeholder="Correct athlete">
+            <input data-manual-input="${escapeAttr(video.id)}" list="eventRosterNames" value="${escapeAttr(video.goldenLabel?.name || "")}" placeholder="Golden athlete">
             <button data-manual-label="${escapeAttr(video.id)}">Save</button>
-            <button class="subtleButton" data-clear-labels="${escapeAttr(video.id)}">Clear</button>
+            <button class="subtleButton" data-clear-golden-label="${escapeAttr(video.id)}">Clear</button>
           </div>
         </td>
         <td>
@@ -339,7 +345,7 @@ function transcriptionBackendLabel(backends = {}) {
 function eventVideoMatchesFilters(video) {
   const status = video.processing?.status || "pending";
   if (state.eventStatus && status !== state.eventStatus) return false;
-  const labels = video.athleteLabels || [];
+  const labels = finalLabels(video);
   if (state.eventConfidence === "confident" && !labels.some((label) => label.confidence >= 0.65)) return false;
   if (state.eventConfidence === "ambiguous" && !labels.some((label) => label.confidence > 0 && label.confidence < 0.65)) return false;
   if (state.eventConfidence === "unlabeled" && labels.length) return false;
@@ -384,7 +390,7 @@ async function renderSearch() {
   }
   const data = await api(`/api/search?q=${encodeURIComponent(state.query)}`);
   el("results").innerHTML = data.results.map((video) => {
-    const labels = video.athleteLabels || [];
+    const labels = finalLabels(video);
     const status = video.processing?.status || "pending";
     const folder = video.folder || {};
     const event = folder.eventMatch || {};
@@ -407,8 +413,8 @@ async function renderSearch() {
           <div class="pillRow">
             <span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span>
             ${labels.map((label) => `
-              <span class="pill ${label.confidence >= 0.65 ? "confident" : "ambiguous"}">
-                ${escapeHtml(label.name)} ${Math.round((label.confidence || 0) * 100)}%
+              <span class="pill ${label.source === "golden_review" ? "golden" : label.confidence >= 0.65 ? "confident" : "ambiguous"}">
+                ${escapeHtml(label.name)} ${label.source === "golden_review" ? "Golden" : `${Math.round((label.confidence || 0) * 100)}%`}
               </span>
             `).join("")}
           </div>
@@ -683,9 +689,28 @@ function escapeAttr(value) {
 }
 
 function compareVideoRows(a, b) {
-  const aLabel = a.athleteLabels?.[0]?.name || "zzzz";
-  const bLabel = b.athleteLabels?.[0]?.name || "zzzz";
+  const aLabel = finalLabel(a)?.name || "zzzz";
+  const bLabel = finalLabel(b)?.name || "zzzz";
   return aLabel.localeCompare(bLabel) || String(a.filename).localeCompare(String(b.filename));
+}
+
+function finalLabel(video) {
+  return video.goldenLabel || video.athleteLabels?.[0] || null;
+}
+
+function finalLabels(video) {
+  const predictions = video.athleteLabels || [];
+  if (!video.goldenLabel) return predictions;
+  return [video.goldenLabel, ...predictions];
+}
+
+function rosterNames(folder) {
+  const names = new Set();
+  for (const racer of folder?.candidateRoster || []) {
+    const name = String(racer.name || racer.fullName || "").trim();
+    if (name) names.add(name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 function formatBytes(value) {

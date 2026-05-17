@@ -462,6 +462,13 @@ select {
   color: var(--warn);
 }
 
+.pill.golden {
+  background: #fff4c7;
+  color: #6a5200;
+  border-color: #d8bd5f;
+  font-weight: 700;
+}
+
 .pill.warn {
   background: #fff7ea;
   color: var(--warn);
@@ -708,6 +715,13 @@ select {
 .labelStack.ambiguous {
   background: #fff7ea;
   color: var(--warn);
+}
+
+.labelStack.golden {
+  background: #fff4c7;
+  color: #6a5200;
+  border-color: #d8bd5f;
+  font-weight: 700;
 }
 
 .labelDebugCell,

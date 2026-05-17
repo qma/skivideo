@@ -209,6 +209,15 @@ Older slug-based cache layouts can be migrated with `node scripts/migrate-cache-
       "methodVersion": "audio-text-v1"
     }
   ],
+  "goldenLabel": {
+    "name": "First Last",
+    "confidence": 1,
+    "probability": 1,
+    "source": "golden_review",
+    "evidence": "Golden label assigned in event review UI",
+    "methodVersion": "golden-v1",
+    "reviewedAt": "2026-05-10T00:00:00.000Z"
+  },
   "processing": {
     "status": "pending | indexed | needs_review | failed",
     "errors": [],
@@ -216,6 +225,8 @@ Older slug-based cache layouts can be migrated with `node scripts/migrate-cache-
   }
 }
 ```
+
+`athleteLabels` stores model/pipeline predictions and should not be overwritten by operator review. The optional `goldenLabel` stores the manually reviewed final answer used for display/search and future training/evaluation.
 
 ### Future Visual Evidence Record
 

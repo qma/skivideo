@@ -316,7 +316,7 @@ async function lookupSharePointRootUrl(config, store, folder) {
   return config.sharepointRootUrl;
 }
 
-function withFallbackRoster(state, folder) {
+export function withFallbackRoster(state, folder) {
   if (!folder || folder.candidateRoster?.length) return folder;
   const teamId = folder.teamId || state.teams?.[0]?.id || "";
   const roster = buildKnownTeamRoster(state, teamId);
@@ -328,7 +328,7 @@ function withFallbackRoster(state, folder) {
   };
 }
 
-function buildKnownTeamRoster(state, teamId) {
+export function buildKnownTeamRoster(state, teamId) {
   const byName = new Map();
   for (const folder of state.folders || []) {
     if (teamId && folder.teamId && folder.teamId !== teamId) continue;

@@ -31,7 +31,7 @@ The public JSON includes:
 
 - `teams`: current team metadata for TPT U14.
 - `folders`: event/folder metadata, event match summaries, public Live-Timing asset links, roster counts, and publish stats.
-- `videos`: publishable videos with SharePoint playback links, transcript snippets, athlete labels, and processing status.
+- `videos`: publishable videos with SharePoint playback links, transcript snippets, athlete labels, optional golden labels, and processing status. When present, `goldenLabel` is the reviewed final answer and should be preferred over predicted `athleteLabels` for rendering/search.
 - `events`: public event calendar records when available.
 
 The public JSON excludes:

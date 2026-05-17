@@ -44,6 +44,8 @@ export default function PublicIndexPage() {
       return normalize([
         video.filename,
         video.transcript?.text,
+        video.goldenLabel?.name,
+        video.goldenLabel?.evidence,
         folder?.name,
         folder?.eventMatch?.canonicalName,
         ...(video.athleteLabels || []).flatMap((label) => [label.name, label.evidence])
@@ -60,7 +62,7 @@ export default function PublicIndexPage() {
   }, [foldersById, normalizedQuery, selectedFolderId, videos]);
 
   const totalIndexed = videos.filter((video) => video.processing?.status === "indexed").length;
-  const labeledVideos = videos.filter((video) => video.athleteLabels?.length).length;
+  const labeledVideos = videos.filter((video) => video.goldenLabel || video.athleteLabels?.length).length;
   const rootShareUrl = index?.teams?.[0]?.sharepointRootUrl || "";
 
   if (error) {
@@ -192,7 +194,7 @@ function Metric({ label, value }) {
 }
 
 function VideoResult({ video, folder }) {
-  const labels = video.athleteLabels || [];
+  const labels = finalLabels(video);
   const primaryLabel = labels[0];
   const videoUrl = video.playbackUrl || video.sharepointUrl;
   return (
@@ -210,7 +212,7 @@ function VideoResult({ video, folder }) {
           <div className="labelList">
             {labels.slice(0, 4).map((label, index) => (
               <span className="labelPill" key={`${label.name}-${index}`}>
-                {label.name} {Math.round((label.confidence || 0) * 100)}%
+                {label.name} {label.source === "golden_review" ? "Golden" : `${Math.round((label.confidence || 0) * 100)}%`}
               </span>
             ))}
           </div>
@@ -229,6 +231,11 @@ function VideoResult({ video, folder }) {
       </div>
     </article>
   );
+}
+
+function finalLabels(video) {
+  const predictions = video.athleteLabels || [];
+  return video.goldenLabel ? [video.goldenLabel, ...predictions] : predictions;
 }
 
 function normalize(value) {

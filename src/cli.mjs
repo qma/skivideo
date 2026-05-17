@@ -206,13 +206,14 @@ async function search(query) {
   const needle = normalizeText(query);
   const results = state.videos
     .filter((video) => {
-      const labels = (video.athleteLabels || []).map((label) => label.name).join(" ");
+      const labels = [video.goldenLabel?.name, ...(video.athleteLabels || []).map((label) => label.name)].filter(Boolean).join(" ");
       return normalizeText(`${labels} ${video.filename} ${video.transcript?.text || ""}`).includes(needle);
     })
     .map((video) => ({
       id: video.id,
       filename: video.filename,
       sharepointUrl: video.sharepointUrl,
+      goldenLabel: video.goldenLabel || null,
       labels: video.athleteLabels || [],
       folder: state.folders.find((folder) => folder.id === video.folderId)?.name || ""
     }));

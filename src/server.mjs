@@ -4,11 +4,12 @@ import path from "node:path";
 import express from "express";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
+import { nowIso, stableId } from "./lib/ids.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
 import { fetchFarWestU14Events, fetchLiveTimingSearch, matchFoldersToEvents } from "./adapters/events.mjs";
-import { processFolder, relabelFolder } from "./pipeline/processFolder.mjs";
+import { processFolder, relabelFolder, withFallbackRoster } from "./pipeline/processFolder.mjs";
 import { prepareEventFolder } from "./pipeline/prepareEvent.mjs";
 import { confirmLiveTimingSelection, ensureFolderManifest, ensureLiveTimingCorrelation } from "./pipeline/eventDependencies.mjs";
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
@@ -242,17 +243,29 @@ function booleanOrUndefined(value) {
 
 async function reviewVideo(body) {
   if (!body.videoId) throw new Error("videoId is required.");
-  if (!["manual-label", "clear-labels"].includes(body.action)) throw new Error("Unsupported review action.");
+  if (!["manual-label", "clear-golden-label", "clear-labels"].includes(body.action)) throw new Error("Unsupported review action.");
   const labelName = String(body.labelName || "").trim();
   if (body.action === "manual-label" && !labelName) throw new Error("labelName is required.");
   let updated = null;
   await store.updateVideoWith((state) => {
     state.videos = state.videos.map((video) => {
       if (video.id !== body.videoId) return video;
+      if (body.action === "clear-golden-label") {
+        const { goldenLabel, ...withoutGoldenLabel } = video;
+        updated = {
+          ...withoutGoldenLabel,
+          processing: {
+            ...(video.processing || {}),
+            reviewedAt: new Date().toISOString()
+          }
+        };
+        return updated;
+      }
       if (body.action === "clear-labels") {
         updated = {
           ...video,
           athleteLabels: [],
+          goldenLabel: null,
           processing: {
             ...(video.processing || {}),
             status: "needs_review",
@@ -261,17 +274,19 @@ async function reviewVideo(body) {
         };
         return updated;
       }
-      const manualLabel = {
+      const goldenLabel = {
         name: labelName,
-        confidence: 0.99,
-        source: "manual_review",
-        evidence: "Manually assigned in event review UI",
+        confidence: 1,
+        probability: 1,
+        source: "golden_review",
+        evidence: "Golden label assigned in event review UI",
         matchedRoster: false,
-        methodVersion: "manual-v1"
+        methodVersion: "golden-v1",
+        reviewedAt: new Date().toISOString()
       };
       updated = {
         ...video,
-        athleteLabels: [manualLabel, ...(video.athleteLabels || []).filter((label) => label.source !== "manual_review")],
+        goldenLabel,
         processing: {
           ...(video.processing || {}),
           status: "indexed",
@@ -293,6 +308,8 @@ async function search(query) {
     .filter((video) => !needle || normalizeText([
       video.filename,
       video.transcript?.text,
+      video.goldenLabel?.name,
+      video.goldenLabel?.evidence,
       ...(video.athleteLabels || []).map((label) => label.name)
     ].join(" ")).includes(needle))
     .map(async (video) => {
@@ -320,7 +337,7 @@ async function summary() {
     labels: 0
   }]));
   const videoStats = await Promise.all(state.videos.map(async (video) => {
-    const labelCount = video.athleteLabels?.length || 0;
+    const labelCount = (video.athleteLabels?.length || 0) + (video.goldenLabel ? 1 : 0);
     const isReadable = video.localVideoPath ? await readableLocalMedia(video.localVideoPath) : null;
     return {
       folderId: video.folderId,
@@ -438,9 +455,10 @@ async function eventDetail(folderId) {
   const state = await store.read();
   const folder = state.folders.find((item) => item.id === folderId);
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
+  const folderWithReviewRoster = withFallbackRoster(state, folder);
   return {
     folder: {
-      ...folder,
+      ...folderWithReviewRoster,
       raceAssets: eventAssets(folder)
     },
     videos: await Promise.all(state.videos

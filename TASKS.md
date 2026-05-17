@@ -144,6 +144,8 @@
 - [codex] Made Whisper model downloads config-driven: `scripts/download-models.sh` now reads `WHISPER_MODEL_SIZE` through `loadConfig()` and downloads the matching `ggml-<size>.bin`; `scripts/install-whisper.sh` invokes it. Backend detection now reports the exact configured missing-model path, and transcription fails with a direct `scripts/download-models.sh` instruction when the preferred whisper.cpp model is absent.
 - [codex] Changed roster-athlete label scoring to normalized probabilities. Roster candidates keep `rawScore` plus normalized `probability`, and `confidence` now uses that probability for roster-derived labels. Example validated on April camp rows: Alice raw `1.0` vs Alex raw `0.78` normalizes to Alice `0.562`, Alex `0.438`; both debug strings show raw and probability. Added smoke coverage for this normalization.
 - [codex] Added a `Relabel` event action in the admin UI. It calls `/api/relabel-folder` and reruns only athlete scoring/labeling from existing transcripts, rosters, and filenames; it does not fetch Live-Timing, download media, extract audio, or transcribe.
+- [codex] Added reviewed golden labels. Event review inputs now autocomplete from the event roster, Save writes `goldenLabel` without overwriting predicted `athleteLabels`, and admin/public display/search paths prefer the golden label as the final answer.
+- [codex] Enabled backend dev hot restart through `npm run dev` using Node watch mode.
 
 ## In Progress
 - None.
