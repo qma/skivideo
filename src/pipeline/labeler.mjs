@@ -210,10 +210,11 @@ Allow for fuzzy/phonetic matches based on common transcription errors.
 Output up to the top 5 candidates as a JSON array of objects. 
 Each object MUST have: 
 "name" (canonical name from roster), 
-"confidence" (0-1), 
+"probability" (0-1), 
 "evidence" (short snippet from transcript),
 "thought" (1-sentence reasoning why this athlete matches, e.g. "Transcript heard 'Zosia' which is a unique first name match for Zosia Buchanan"),
 "matchedRoster" (boolean).
+The "probability" values across all candidates in the list MUST sum to 1.0 (Bayesian normalization).
 Return COMPACT JSON ONLY. No preamble.`;
 
   const userContent = {
@@ -251,6 +252,7 @@ Return COMPACT JSON ONLY. No preamble.`;
 
   return labels.map((label) => ({
     ...label,
+    confidence: label.probability || 0,
     source: "gemini_llm_audio_roster_reasoning",
     methodVersion: `gemini-${config.geminiLabelModel}-v1`
   }));
