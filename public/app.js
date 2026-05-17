@@ -228,12 +228,19 @@ function renderEventView() {
           <div class="muted">${formatBytes(video.sizeBytes)}</div>
           <div class="muted">${escapeHtml((video.transcript?.text || "").slice(0, 90))}</div>
         </td>
-        <td>${labels.length ? labels.map((label) => `
-          <span class="labelStack ${label.confidence >= 0.65 ? "confident" : "ambiguous"}">
-            ${escapeHtml(label.name)}
-            <span>${Math.round((label.confidence || 0) * 100)}%</span>
-          </span>
-        `).join("") : `<span class="muted">Unlabeled</span>`}</td>
+        <td>${labels.length ? labels.map((label) => {
+          const tooltip = [
+            label.thought ? `LLM Thought: ${label.thought}` : "",
+            label.evidence ? `Evidence: "${label.evidence}"` : "",
+            label.debug ? `Debug: ${label.debug}` : ""
+          ].filter(Boolean).join("\n\n");
+          return `
+            <span class="labelStack ${label.confidence >= 0.65 ? "confident" : "ambiguous"}" title="${escapeAttr(tooltip)}">
+              ${escapeHtml(label.name)}
+              <span>${Math.round((label.confidence || 0) * 100)}%${label.thought ? " ✨" : ""}</span>
+            </span>
+          `;
+        }).join("") : `<span class="muted">Unlabeled</span>`}</td>
         <td><span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span></td>
         <td class="labelDebugCell">${renderLabelDebug(video.labelDebug, best)}</td>
         <td class="transcriptCell">${escapeHtml(video.transcript?.text || "")}</td>
@@ -715,6 +722,7 @@ function playbackHref(video) {
 
 function renderLabelDebug(debug, bestLabel) {
   const lines = [];
+  if (bestLabel?.thought) lines.push(`LLM: ${bestLabel.thought}`);
   if (bestLabel?.debug) lines.push(bestLabel.debug);
   const final = (debug?.finalLabels || []).find((label) => normalizeClientText(label.name) === normalizeClientText(bestLabel?.name || ""));
   if (final?.debug && final.debug !== bestLabel?.debug) lines.push(final.debug);
