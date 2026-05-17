@@ -12,3 +12,5 @@ python - <<'PY'
 import mlx_whisper
 print("mlx-whisper installed")
 PY
+
+scripts/download-models.sh

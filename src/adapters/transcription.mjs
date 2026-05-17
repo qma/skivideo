@@ -6,14 +6,15 @@ import { mirroredAudioPathForVideoPath, transcriptOutputPathForAudio } from "../
 import { resolveFfmpeg } from "./media.mjs";
 
 export async function detectTranscriptionBackends(config) {
-  const whisperCpp = await whisperCppWorks(config);
+  const whisperCpp = await whisperCppStatus(config);
   const preferred = config.whisperBackend || "whisper.cpp";
 
-  if (preferred === "whisper.cpp" && whisperCpp) {
+  if (preferred === "whisper.cpp" && whisperCpp.ok) {
     return {
       mlxWhisper: false,
       whisperCpp: true,
-      openai: Boolean(config.openaiApiKey)
+      openai: Boolean(config.openaiApiKey),
+      whisperCppModel: whisperCpp.model
     };
   }
 
@@ -23,20 +24,27 @@ export async function detectTranscriptionBackends(config) {
   if (mlxWhisper) {
     return {
       mlxWhisper: true,
-      whisperCpp: preferred === "whisper.cpp" ? whisperCpp : false,
+      whisperCpp: preferred === "whisper.cpp" ? whisperCpp.ok : false,
+      whisperCppError: preferred === "whisper.cpp" ? whisperCpp.error : "",
+      whisperCppModel: whisperCpp.model,
       openai: Boolean(config.openaiApiKey)
     };
   }
 
   return {
     mlxWhisper: false,
-    whisperCpp,
+    whisperCpp: whisperCpp.ok,
+    whisperCppError: whisperCpp.error,
+    whisperCppModel: whisperCpp.model,
     openai: Boolean(config.openaiApiKey)
   };
 }
 
 export async function transcribeAudio(config, audioPath, options = {}) {
   const backends = await detectTranscriptionBackends(config);
+  if ((config.whisperBackend || "whisper.cpp") === "whisper.cpp" && backends.whisperCppError) {
+    throw new Error(backends.whisperCppError);
+  }
   if (backends.mlxWhisper) return transcribeWithMlxWhisper(config, audioPath, options);
   if (backends.whisperCpp) return transcribeWithWhisperCpp(config, audioPath, options);
   if (backends.openai) return transcribeWithOpenAi(config, audioPath, options);
@@ -190,15 +198,32 @@ function promptHash(prompt) {
   return createHash("sha1").update(prompt).digest("hex").slice(0, 10);
 }
 
-async function whisperCppWorks(config) {
+async function whisperCppStatus(config) {
   const command = process.env.WHISPER_CPP_BIN || "/opt/homebrew/bin/whisper-cli";
   try {
     await fs.access(command);
-    const model = process.env.WHISPER_CPP_MODEL || await getWhisperCppModelPath(config, config.whisperModelSize);
-    await fs.access(model);
-    return true;
   } catch {
-    return false;
+    return {
+      ok: false,
+      command,
+      model: "",
+      error: `whisper.cpp binary is not installed at ${command}. Install whisper.cpp, or set WHISPER_CPP_BIN to the whisper-cli path.`
+    };
+  }
+  const requestedSize = config.whisperModelSize || "medium";
+  const explicitModel = process.env.WHISPER_CPP_MODEL || "";
+  const model = explicitModel || await getWhisperCppModelPath(config, requestedSize);
+  try {
+    await fs.access(model);
+    return { ok: true, command, model, error: "" };
+  } catch {
+    const target = explicitModel ? `WHISPER_CPP_MODEL=${explicitModel}` : `WHISPER_MODEL_SIZE=${requestedSize}`;
+    return {
+      ok: false,
+      command,
+      model,
+      error: `Whisper model is not installed for ${target}: ${model}. Run scripts/download-models.sh to download the configured model, or set WHISPER_MODEL_SIZE/WHISPER_CPP_MODEL to an installed model.`
+    };
   }
 }
 
