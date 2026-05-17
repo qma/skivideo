@@ -138,6 +138,30 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
   };
 }));
 app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId)));
+app.post("/api/relabel-folder-async", asyncRoute(async (req) => {
+  const { folderId } = req.body;
+  if (!folderId) throw new Error("folderId is required.");
+  const startedAt = nowIso();
+  const jobId = stableId("job", `relabel:${folderId}:${startedAt}`);
+  await store.addJob({
+    id: jobId,
+    type: "relabel_folder",
+    folderId,
+    status: "running",
+    startedAt,
+    updatedAt: startedAt,
+    parallel: 1,
+    message: "Relabeling started"
+  });
+  relabelFolder(config, store, folderId, { jobId }).catch((error) => {
+    console.error(`Background relabel failed for ${folderId}:`, error);
+  });
+  return {
+    ok: true,
+    jobId,
+    message: "Relabeling started in the background. Watch the Jobs panel for live progress."
+  };
+}));
 app.post("/api/delete-folder", asyncRoute(async (req) => {
   console.log("Delete folder requested:", req.body.folderId);
   if (!req.body.folderId) throw new Error("folderId is required.");

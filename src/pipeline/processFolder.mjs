@@ -150,26 +150,71 @@ export async function processFolder(config, store, folderId, options = {}) {
   return { jobId, indexed, needsReview, failed, parallel };
 }
 
-export async function relabelFolder(config, store, folderId) {
-  const state = await store.read();
-  const folder = withFallbackRoster(state, state.folders.find((item) => item.id === folderId));
-  if (!folder) throw new Error(`Folder not found: ${folderId}`);
-  const videos = state.videos.filter((video) => video.folderId === folderId);
-  let indexed = 0;
-  let needsReview = 0;
-  for (const video of videos) {
-    const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder);
-    const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
-    const processing = {
-      ...(video.processing || {}),
-      status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
-      relabeledAt: nowIso()
-    };
-    await store.updateVideo(video.id, { athleteLabels, labelDebug, processing });
-    if (processing.status === "indexed") indexed += 1;
-    else needsReview += 1;
+export async function relabelFolder(config, store, folderId, options = {}) {
+  const startedAt = nowIso();
+  const jobId = options.jobId || stableId("job", `relabel:${folderId}:${startedAt}`);
+  if (!options.jobId) {
+    await store.addJob({
+      id: jobId,
+      type: "relabel_folder",
+      folderId,
+      status: "running",
+      startedAt,
+      updatedAt: startedAt,
+      parallel: 1,
+      message: "Relabeling started"
+    });
   }
-  return { folderId, videos: videos.length, indexed, needsReview };
+
+  try {
+    let state = await store.read();
+    const folder = withFallbackRoster(state, state.folders.find((item) => item.id === folderId));
+    if (!folder) throw new Error(`Folder not found: ${folderId}`);
+    const videos = state.videos.filter((video) => video.folderId === folderId);
+    let indexed = 0;
+    let needsReview = 0;
+
+    for (let i = 0; i < videos.length; i++) {
+      const video = videos[i];
+      const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder);
+      const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
+      const processing = {
+        ...(video.processing || {}),
+        status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
+        relabeledAt: nowIso()
+      };
+      await store.updateVideo(video.id, { athleteLabels, labelDebug, processing });
+      if (processing.status === "indexed") indexed += 1;
+      else needsReview += 1;
+
+      if ((i + 1) % 10 === 0 || i === videos.length - 1) {
+        await store.updateJob(jobId, {
+          message: `Relabeled ${i + 1}/${videos.length}`,
+          indexed,
+          needsReview,
+          updatedAt: nowIso()
+        });
+      }
+    }
+
+    const message = `Done: ${indexed} indexed, ${needsReview} review`;
+    await store.updateJob(jobId, {
+      status: "completed",
+      message,
+      completedAt: nowIso(),
+      indexed,
+      needsReview
+    });
+    return { folderId, videos: videos.length, indexed, needsReview, message };
+  } catch (error) {
+    await store.updateJob(jobId, {
+      status: "failed",
+      message: `Relabel failed: ${error.message}`,
+      details: error.stack,
+      completedAt: nowIso()
+    });
+    throw error;
+  }
 }
 
 export async function processVideo(config, video, folder, options = {}, rootUrl = config.sharepointRootUrl) {

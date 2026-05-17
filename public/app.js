@@ -527,10 +527,8 @@ async function startReprocessing(folderId) {
 }
 
 async function relabelFolder(folderId) {
-  const result = await action("/api/relabel-folder", { folderId });
-  if (result?.folderId) {
-    await refresh();
-  }
+  const result = await action("/api/relabel-folder-async", { folderId });
+  if (result?.ok) scheduleJobPolling(true);
 }
 
 async function resetFolder(folderId) {
