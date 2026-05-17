@@ -208,7 +208,12 @@ Focus on identifying athletes actually featured in the video or explicitly calle
 Allow for fuzzy/phonetic matches based on common transcription errors.
 
 Output up to the top 5 candidates as a JSON array of objects. 
-Each object MUST have: "name" (canonical name from roster), "confidence" (0-1), "evidence" (short snippet from transcript), and "matchedRoster" (boolean).
+Each object MUST have: 
+"name" (canonical name from roster), 
+"confidence" (0-1), 
+"evidence" (short snippet from transcript),
+"thought" (1-sentence reasoning why this athlete matches, e.g. "Transcript heard 'Zosia' which is a unique first name match for Zosia Buchanan"),
+"matchedRoster" (boolean).
 Return COMPACT JSON ONLY. No preamble.`;
 
   const userContent = {
