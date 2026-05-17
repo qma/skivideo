@@ -124,6 +124,8 @@
 - [codex] Refactored the local cache layout so media, audio, and transcript artifacts mirror the SharePoint team folder under `data/{media,audio,transcripts}/TPT U14 2025-2026/`; added `scripts/migrate-cache-layout.mjs` for repeatable migration/cleanup.
 - [codex] Migrated the local metadata/cache to the mirrored layout and validated 823 video records with 0 stale local refs and 0 missing referenced local files.
 - [codex] Fixed event list status badges so `Processed`/`Processed + review` are based on processing completion, while local media availability remains a separate count.
+- [codex] Replaced always-mounted event/search row video players with lightweight preview buttons; local media loads only after clicking into the preview dialog, and source-only videos open their SharePoint link.
+- [codex] Updated preview behavior so source SharePoint videos use the same lazy dialog player as local cached videos.
 
 ## In Progress
 - None.

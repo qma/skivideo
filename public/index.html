@@ -108,6 +108,15 @@
       <form method="dialog"><button>Close</button></form>
     </dialog>
 
+    <dialog id="mediaPreviewDialog" class="mediaPreviewDialog">
+      <div class="mediaPreviewHeader">
+        <strong id="mediaPreviewTitle">Preview</strong>
+        <form method="dialog"><button>Close</button></form>
+      </div>
+      <video id="mediaPreviewPlayer" controls playsinline></video>
+      <a id="mediaPreviewOpen" class="actionLink" target="_blank" rel="noreferrer">Open Video</a>
+    </dialog>
+
     <script src="/app.js"></script>
   </body>
 </html>

@@ -47,6 +47,16 @@ function bindActions() {
     if (state.jobLogTimer) clearTimeout(state.jobLogTimer);
     state.jobLogTimer = null;
   });
+  el("mediaPreviewDialog").addEventListener("close", closeMediaPreview);
+  document.body.addEventListener("click", (event) => {
+    const preview = event.target.closest("[data-preview-href]");
+    if (!preview) return;
+    event.preventDefault();
+    openMediaPreview({
+      href: preview.dataset.previewHref,
+      title: preview.dataset.previewTitle
+    });
+  });
   el("closeEventView").addEventListener("click", () => {
     state.selectedFolderId = "";
     state.eventDetail = null;
@@ -202,13 +212,7 @@ function renderEventView() {
     return `
       <tr>
         <td>
-          <video
-            class="thumbVideo"
-            src="${escapeAttr(playbackHref(video))}"
-            controls
-            preload="metadata"
-            playsinline
-            title="${escapeAttr(video.localVideoPlayable ? "Local cached media" : "Source media fallback")}"></video>
+          ${previewButton(video)}
         </td>
         <td>
           <strong>${escapeHtml(video.filename)}</strong>
@@ -329,13 +333,7 @@ async function renderSearch() {
     return `
       <article class="result searchResult">
         <div class="resultPreview">
-          <video
-            class="thumbVideo"
-            src="${escapeAttr(playbackHref(video))}"
-            controls
-            preload="metadata"
-            playsinline
-            title="${escapeAttr(video.localVideoPlayable ? "Local cached media" : "Source media fallback")}"></video>
+          ${previewButton(video)}
         </div>
         <div class="resultContent">
           <div class="resultHeader">
@@ -362,6 +360,39 @@ async function renderSearch() {
       </article>
     `;
   }).join("") || `<p class="muted">No matching videos.</p>`;
+}
+
+function previewButton(video) {
+  return `
+    <button
+      class="thumbPreview"
+      type="button"
+      data-preview-href="${escapeAttr(playbackHref(video))}"
+      data-preview-title="${escapeAttr(video.filename || "Video preview")}"
+      title="${escapeAttr(video.localVideoPlayable ? "Open local preview player" : "Open source preview player")}">
+      <span class="thumbPlay">Play</span>
+      <span class="thumbPreviewMeta">${escapeHtml(video.localVideoPlayable ? "Local preview" : "Source preview")}</span>
+    </button>
+  `;
+}
+
+function openMediaPreview({ href, title }) {
+  if (!href) return;
+  const dialog = el("mediaPreviewDialog");
+  const player = el("mediaPreviewPlayer");
+  el("mediaPreviewTitle").textContent = title || "Preview";
+  el("mediaPreviewOpen").href = href;
+  player.src = href;
+  player.muted = false;
+  dialog.showModal();
+  player.play().catch(() => {});
+}
+
+function closeMediaPreview() {
+  const player = el("mediaPreviewPlayer");
+  player.pause();
+  player.removeAttribute("src");
+  player.load();
 }
 
 async function action(path, body = {}, options = {}) {

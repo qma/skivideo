@@ -533,7 +533,7 @@ select {
   text-transform: uppercase;
 }
 
-.thumbVideo,
+.thumbPreview,
 .thumbMissing {
   width: 208px;
   aspect-ratio: 16 / 9;
@@ -542,11 +542,81 @@ select {
   background: #101816;
 }
 
+.thumbPreview {
+  display: grid;
+  place-items: center;
+  position: relative;
+  cursor: pointer;
+  color: #f5fbf8;
+  font: inherit;
+  overflow: hidden;
+}
+
+.thumbPreview:hover,
+.thumbPreview:focus-visible {
+  border-color: #6c8f7a;
+  outline: none;
+}
+
+.thumbPlay {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #f5fbf8;
+  color: #10201b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.thumbPreviewMeta {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 7px;
+  color: #cbd5d1;
+  font-size: 12px;
+}
+
 .thumbMissing {
   display: grid;
   place-items: center;
   color: #cbd5d1;
   font-size: 12px;
+}
+
+.mediaPreviewDialog {
+  width: min(960px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcf9;
+}
+
+.mediaPreviewDialog::backdrop {
+  background: rgb(14 24 21 / 60%);
+}
+
+.mediaPreviewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+#mediaPreviewPlayer {
+  display: block;
+  width: 100%;
+  max-height: 72vh;
+  background: #101816;
+  border-radius: 6px;
+}
+
+#mediaPreviewOpen {
+  margin-top: 12px;
 }
 
 .labelStack {
