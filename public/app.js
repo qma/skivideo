@@ -490,7 +490,7 @@ async function confirmLiveTimingMatches() {
 async function confirmNoLiveTiming() {
   if (!state.selectedFolderId) return;
   if (!confirm("Are you sure this event has no Live-Timing match? This will continue using only filenames and transcripts for athlete labeling.")) return;
-  const result = await action("/api/confirm-no-live-timing", { folderId: state.selectedFolderId }, { silent: true });
+  const result = await action("/api/confirm-live-timing", { folderId: state.selectedFolderId, raceIds: [] }, { silent: true });
   if (!result?.ok) return;
   showLog(result);
   state.eventDetail = await api(`/api/event?folderId=${encodeURIComponent(state.selectedFolderId)}`);

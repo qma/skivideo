@@ -78,33 +78,51 @@ export async function ensureLiveTimingCorrelation(config, store, folderId, optio
 
 export async function confirmLiveTimingSelection(config, store, folderId, raceIds = []) {
   if (!folderId) throw new Error("folderId is required.");
-  if (!Array.isArray(raceIds) || !raceIds.length) throw new Error("raceIds are required.");
+  if (!Array.isArray(raceIds)) throw new Error("raceIds must be an array.");
   if (raceIds.length > 2) throw new Error("Select at most two Live-Timing races.");
+
   const state = await store.read();
   const folder = state.folders.find((item) => item.id === folderId);
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
   const candidates = folder.eventMatch?.liveTimingCandidates || [];
-  const selected = raceIds.map((raceId) => {
-    const candidate = candidates.find((match) => String(match.raceId) === String(raceId));
-    if (!candidate) throw new Error(`Selected race is not a current candidate: ${raceId}`);
-    return { race: candidate, confidence: candidate.confidence || 1 };
-  });
-  const selection = resolveLiveTimingSelection(selected);
-  if (selection.status !== "auto_confirmed") throw new Error(selection.reason || "Selected races must include at most one Men and one Women race.");
+
+  let selected = [];
+  let selection;
+
+  if (raceIds.length === 0) {
+    selection = {
+      status: "admin_confirmed_none",
+      reason: "Admin confirmed no Live-Timing match",
+      matches: [],
+      candidates
+    };
+  } else {
+    selected = raceIds.map((raceId) => {
+      const candidate = candidates.find((match) => String(match.raceId) === String(raceId));
+      if (!candidate) throw new Error(`Selected race is not a current candidate: ${raceId}`);
+      return { race: candidate, confidence: candidate.confidence || 1 };
+    });
+    const resolved = resolveLiveTimingSelection(selected);
+    if (resolved.status !== "auto_confirmed") throw new Error(resolved.reason || "Selected races must include at most one Men and one Women race.");
+    selection = {
+      status: "admin_confirmed",
+      reason: "Admin selected Live-Timing races",
+      matches: selected,
+      candidates
+    };
+  }
+
   const correlation = await finalizeLiveTimingCorrelation(config, folder, {
     query: folder.eventMatch?.liveTimingCorrelation?.query || "",
     search: liveTimingSearchFromFolder(folder),
     daily: null,
     liveTimingMatches: selected,
     liveTimingCandidates: candidates.map((candidate) => ({ race: candidate, confidence: candidate.confidence || 0 })),
-    selection: {
-      status: "admin_confirmed",
-      reason: "Admin selected Live-Timing races",
-      matches: selected,
-      candidates
-    }
+    selection
   });
+
   await store.updateFolder(folderId, liveTimingPatch(folder, correlation));
+
   return {
     ok: true,
     folderId,
@@ -113,38 +131,9 @@ export async function confirmLiveTimingSelection(config, store, folderId, raceId
     tptRoster: correlation.candidateRoster.filter((racer) => /^(TPT|TPTA)$/i.test(racer.team || "")).length,
     assets: correlation.assets.length,
     selection: correlation.selection,
-    message: `Confirmed ${correlation.liveTimingMatches.length} Live-Timing race${correlation.liveTimingMatches.length === 1 ? "" : "s"}`
-  };
-}
-
-export async function confirmNoLiveTiming(config, store, folderId) {
-  if (!folderId) throw new Error("folderId is required.");
-  const state = await store.read();
-  const folder = state.folders.find((item) => item.id === folderId);
-  if (!folder) throw new Error(`Folder not found: ${folderId}`);
-  const correlation = await finalizeLiveTimingCorrelation(config, folder, {
-    query: folder.eventMatch?.liveTimingCorrelation?.query || "",
-    search: liveTimingSearchFromFolder(folder),
-    daily: null,
-    liveTimingMatches: [],
-    liveTimingCandidates: (folder.eventMatch?.liveTimingCandidates || []).map((candidate) => ({ race: candidate, confidence: candidate.confidence || 0 })),
-    selection: {
-      status: "admin_confirmed_none",
-      reason: "Admin confirmed no Live-Timing match",
-      matches: [],
-      candidates: folder.eventMatch?.liveTimingCandidates || []
-    }
-  });
-  await store.updateFolder(folderId, liveTimingPatch(folder, correlation));
-  return {
-    ok: true,
-    folderId,
-    races: [],
-    candidateRoster: 0,
-    tptRoster: 0,
-    assets: correlation.assets.length,
-    selection: correlation.selection,
-    message: "Confirmed no Live-Timing match for this event"
+    message: raceIds.length === 0
+      ? "Confirmed no Live-Timing match for this event"
+      : `Confirmed ${correlation.liveTimingMatches.length} Live-Timing race${correlation.liveTimingMatches.length === 1 ? "" : "s"}`
   };
 }
 
