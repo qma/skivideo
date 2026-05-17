@@ -289,6 +289,7 @@ async function summary() {
     indexed: 0,
     needsReview: 0,
     failed: 0,
+    localVideoRefs: 0,
     localVideo: 0,
     transcripts: 0,
     labels: 0
@@ -301,6 +302,7 @@ async function summary() {
     if (!stats) continue;
     stats.videoCount += 1;
     stats.labels += labelCount;
+    if (video.localVideoPath) stats.localVideoRefs += 1;
     if (video.localVideoPath && await readableLocalMedia(video.localVideoPath)) stats.localVideo += 1;
     if (video.transcript?.text) stats.transcripts += 1;
     const status = video.processing?.status || "pending";
@@ -333,6 +335,7 @@ async function summary() {
         indexed: 0,
         needsReview: 0,
         failed: 0,
+        localVideoRefs: 0,
         localVideo: 0,
         transcripts: 0,
         labels: 0

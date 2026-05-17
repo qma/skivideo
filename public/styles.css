@@ -710,10 +710,19 @@ select {
   color: var(--warn);
 }
 
-.evidenceCell {
+.labelDebugCell,
+.transcriptCell {
   max-width: 360px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.labelDebugCell {
+  max-width: 420px;
+}
+
+.labelDebugCell div + div {
+  margin-top: 5px;
 }
 
 .reviewTools {

@@ -155,7 +155,7 @@ function renderFolders() {
         </div>
         <div class="eventCounts">
           <strong>${stats.videoCount || 0}</strong>
-          <span>${stats.localVideo || 0} local · ${stats.transcripts || 0} tx</span>
+          <span>${stats.localVideo || 0} playable · ${stats.localVideoRefs || 0} refs · ${stats.transcripts || 0} tx</span>
         </div>
         <div class="eventCounts">
           <strong>${stats.indexed || 0}/${stats.videoCount || 0}</strong>
@@ -233,7 +233,8 @@ function renderEventView() {
           </span>
         `).join("") : `<span class="muted">Unlabeled</span>`}</td>
         <td><span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span></td>
-        <td class="evidenceCell">${escapeHtml(best?.evidence || video.transcript?.text || "")}</td>
+        <td class="labelDebugCell">${renderLabelDebug(video.labelDebug, best)}</td>
+        <td class="transcriptCell">${escapeHtml(video.transcript?.text || "")}</td>
         <td>
           <div class="reviewTools">
             <input data-manual-input="${escapeAttr(video.id)}" placeholder="Correct athlete">
@@ -247,7 +248,7 @@ function renderEventView() {
         </td>
       </tr>
     `;
-  }).join("") || `<tr><td colspan="7" class="muted">No videos in this event.</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted">No videos in this event.</td></tr>`;
 }
 
 function renderLiveTimingSelection(folder) {
@@ -339,7 +340,8 @@ function eventVideoMatchesFilters(video) {
     video.filename,
     video.transcript?.text,
     video.processing?.status,
-    ...labels.flatMap((label) => [label.name, label.evidence, label.source])
+    labelDebugSearchText(video.labelDebug),
+    ...labels.flatMap((label) => [label.name, label.evidence, label.source, label.debug])
   ].join(" ")).includes(needle);
 }
 
@@ -698,6 +700,30 @@ function playbackHref(video) {
     return `/media/${encodeURIComponent(video.id)}`;
   }
   return video.sharepointUrl;
+}
+
+function renderLabelDebug(debug, bestLabel) {
+  const lines = [];
+  if (bestLabel?.debug) lines.push(bestLabel.debug);
+  const final = (debug?.finalLabels || []).find((label) => normalizeClientText(label.name) === normalizeClientText(bestLabel?.name || ""));
+  if (final?.debug && final.debug !== bestLabel?.debug) lines.push(final.debug);
+  const topCandidates = (debug?.rosterCandidates || []).slice(0, 3);
+  for (const candidate of topCandidates) {
+    const reason = candidate.reason || `${candidate.name}: ${candidate.source || "candidate"} ${Math.round((candidate.confidence || 0) * 100)}%`;
+    if (!lines.includes(reason)) lines.push(reason);
+  }
+  if (!lines.length && debug?.notes?.length) lines.push(...debug.notes);
+  if (!lines.length) return `<span class="muted">No debug yet</span>`;
+  return lines.slice(0, 4).map((line) => `<div>${escapeHtml(line)}</div>`).join("");
+}
+
+function labelDebugSearchText(debug) {
+  if (!debug) return "";
+  return [
+    ...(debug.finalLabels || []).flatMap((label) => [label.name, label.source, label.debug]),
+    ...(debug.rosterCandidates || []).flatMap((candidate) => [candidate.name, candidate.source, candidate.reason, candidate.fuzzy?.observed]),
+    ...(debug.notes || [])
+  ].join(" ");
 }
 
 function actionHref(actionName, folderId) {

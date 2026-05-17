@@ -2,19 +2,50 @@ import { includesName, normalizeText, tokenizeName } from "../lib/text.mjs";
 import { bestFuzzyRosterMatch } from "../lib/fuzzyNames.mjs";
 
 export async function labelVideoAthletes(config, video, folder) {
-  const deterministic = deterministicLabels(video, folder);
+  const result = await labelVideoAthletesWithDebug(config, video, folder);
+  return result.labels;
+}
+
+export async function labelVideoAthletesWithDebug(config, video, folder) {
+  const deterministic = deterministicLabelsWithDebug(video, folder);
+  const debug = deterministic.debug;
+  const deterministicLabelsOnly = deterministic.labels;
   if (config.openaiApiKey && process.env.LLM_LABEL_MODE === "always") {
-    return mergeLabels(deterministic, await labelWithOpenAi(config, video, folder));
+    const openAiLabels = await labelWithOpenAi(config, video, folder);
+    const labels = mergeLabels(deterministicLabelsOnly, openAiLabels);
+    debug.openAi = { mode: "always", labels: openAiLabels.length };
+    debug.finalLabels = labels.map(debugLabelSummary);
+    return { labels, debug };
   }
-  if (deterministic.length || !config.openaiApiKey) return deterministic;
-  return labelWithOpenAi(config, video, folder);
+  if (deterministicLabelsOnly.length || !config.openaiApiKey) {
+    debug.openAi = { mode: config.openaiApiKey ? "skipped_deterministic_found_labels" : "unavailable" };
+    debug.finalLabels = deterministicLabelsOnly.map(debugLabelSummary);
+    return { labels: deterministicLabelsOnly, debug };
+  }
+  const labels = await labelWithOpenAi(config, video, folder);
+  debug.openAi = { mode: "fallback_no_deterministic_labels", labels: labels.length };
+  debug.finalLabels = labels.map(debugLabelSummary);
+  return { labels, debug };
 }
 
 export function deterministicLabels(video, folder) {
+  return deterministicLabelsWithDebug(video, folder).labels;
+}
+
+function deterministicLabelsWithDebug(video, folder) {
   const transcriptText = video.transcript?.text || "";
   const filename = video.filename || "";
   const roster = folder?.candidateRoster || [];
   const labels = [];
+  const debug = {
+    methodVersion: "deterministic-v2",
+    transcriptChars: transcriptText.length,
+    filename,
+    rosterSize: roster.length,
+    rosterCandidates: [],
+    extractedNames: [],
+    notes: []
+  };
   const fuzzyMatches = new Map();
   const fuzzyObservedCounts = new Map();
   const filenameMatches = new Map();
@@ -38,12 +69,43 @@ export function deterministicLabels(video, folder) {
     const fuzzy = fuzzyMatches.get(racer);
     const fuzzyMatch = fuzzy && fuzzy.score >= 0.76;
     const ambiguousFuzzy = fuzzyMatch && isSingleToken(fuzzy.observed) && (fuzzyObservedCounts.get(normalizeText(fuzzy.observed)) || 0) > 1;
-    if (!(inTranscript || inFilename || filenameRosterMatch || bibMatch || fuzzyMatch)) continue;
+    const candidate = {
+      name: racer.name,
+      bib: racer.bib || "",
+      team: racer.team || racer.club || "",
+      checks: {
+        exactTranscript: Boolean(inTranscript),
+        exactFilename: Boolean(inFilename),
+        filenameRoster: Boolean(filenameRosterMatch),
+        bibFilename: Boolean(bibMatch),
+        fuzzyTranscript: Boolean(fuzzyMatch),
+        ambiguousFuzzy: Boolean(ambiguousFuzzy)
+      },
+      fuzzy: fuzzy ? { observed: fuzzy.observed, score: Number(fuzzy.score.toFixed(3)) } : null,
+      filenameRoster: filenameRoster ? {
+        observed: filenameRoster.observed,
+        score: Number(filenameRoster.score.toFixed(3)),
+        confidence: Number(filenameRoster.confidence.toFixed(3))
+      } : null,
+      selected: false,
+      confidence: 0,
+      source: ""
+    };
+    if (!(inTranscript || inFilename || filenameRosterMatch || bibMatch || fuzzyMatch)) {
+      if (candidate.fuzzy?.score >= 0.62 || candidate.filenameRoster?.score >= 0.72) debug.rosterCandidates.push(candidate);
+      continue;
+    }
     const confidence = inTranscript ? 0.86 : inFilename ? 0.7 : filenameRosterMatch ? filenameRoster.confidence : bibMatch ? 0.58 : ambiguousFuzzy ? 0.52 : Math.min(0.68, fuzzy.score * 0.78);
+    const source = inTranscript ? "audio_transcript" : inFilename ? "filename_context" : filenameRosterMatch ? "filename_roster_match" : bibMatch ? "bib_filename_context" : ambiguousFuzzy ? "fuzzy_audio_roster_ambiguous" : "fuzzy_audio_roster_match";
+    candidate.selected = true;
+    candidate.confidence = Number(confidence.toFixed(3));
+    candidate.source = source;
+    candidate.reason = scoreReason(candidate);
+    debug.rosterCandidates.push(candidate);
     labels.push({
       name: racer.name,
       confidence,
-      source: inTranscript ? "audio_transcript" : inFilename ? "filename_context" : filenameRosterMatch ? "filename_roster_match" : bibMatch ? "bib_filename_context" : ambiguousFuzzy ? "fuzzy_audio_roster_ambiguous" : "fuzzy_audio_roster_match",
+      source,
       evidence: inTranscript
         ? evidenceSnippet(transcriptText, racer.name)
         : filenameRosterMatch
@@ -55,6 +117,7 @@ export function deterministicLabels(video, folder) {
           : `Matched ${inFilename ? "name" : "bib"} in filename ${filename}`,
       matchedRoster: true,
       fuzzy: fuzzyMatch ? { observed: fuzzy.observed, score: Number(fuzzy.score.toFixed(2)) } : undefined,
+      debug: scoreReason(candidate),
       methodVersion: "deterministic-v1"
     });
   }
@@ -62,12 +125,20 @@ export function deterministicLabels(video, folder) {
   if (!labels.length) {
     const possible = inferCapitalizedNames(transcriptText);
     for (const name of possible) {
+      const extracted = {
+        name,
+        source: "audio_transcript_unmatched_name",
+        confidence: 0.42,
+        evidence: evidenceSnippet(transcriptText, name)
+      };
+      debug.extractedNames.push(extracted);
       labels.push({
         name,
         confidence: 0.42,
         source: "audio_transcript_unmatched_name",
-        evidence: evidenceSnippet(transcriptText, name),
+        evidence: extracted.evidence,
         matchedRoster: false,
+        debug: "No roster match; extracted capitalized full-name phrase from transcript.",
         methodVersion: "deterministic-v1"
       });
     }
@@ -75,18 +146,32 @@ export function deterministicLabels(video, folder) {
 
   if (!labels.length) {
     for (const name of inferSingleWordCallouts(transcriptText)) {
+      const extracted = {
+        name,
+        source: "audio_transcript_single_word",
+        confidence: 0.32,
+        evidence: evidenceSnippet(transcriptText, name)
+      };
+      debug.extractedNames.push(extracted);
       labels.push({
         name,
         confidence: 0.32,
         source: "audio_transcript_single_word",
-        evidence: evidenceSnippet(transcriptText, name),
+        evidence: extracted.evidence,
         matchedRoster: false,
+        debug: "No roster match; extracted single capitalized callout from transcript.",
         methodVersion: "deterministic-v1"
       });
     }
   }
 
-  return dedupeLabels(labels).sort((a, b) => b.confidence - a.confidence);
+  const finalLabels = dedupeLabels(labels).sort((a, b) => b.confidence - a.confidence);
+  debug.rosterCandidates = debug.rosterCandidates
+    .sort((a, b) => Number(b.selected) - Number(a.selected) || (b.confidence || 0) - (a.confidence || 0) || (b.fuzzy?.score || 0) - (a.fuzzy?.score || 0))
+    .slice(0, 12);
+  debug.finalLabels = finalLabels.map(debugLabelSummary);
+  if (!finalLabels.length) debug.notes.push("No label met deterministic exact, filename, bib, or fuzzy thresholds.");
+  return { labels: finalLabels, debug };
 }
 
 async function labelWithOpenAi(config, video, folder) {
@@ -185,6 +270,27 @@ function dedupeLabels(labels) {
 
 function mergeLabels(...groups) {
   return dedupeLabels(groups.flat()).sort((a, b) => b.confidence - a.confidence);
+}
+
+function scoreReason(candidate) {
+  const checks = candidate.checks || {};
+  const matched = [];
+  if (checks.exactTranscript) matched.push("exact transcript name");
+  if (checks.exactFilename) matched.push("exact filename name");
+  if (checks.filenameRoster) matched.push(`filename token "${candidate.filenameRoster?.observed}" matched roster`);
+  if (checks.bibFilename) matched.push("bib matched filename");
+  if (checks.fuzzyTranscript) matched.push(`transcript "${candidate.fuzzy?.observed}" fuzzy ${candidate.fuzzy?.score}`);
+  if (checks.ambiguousFuzzy) matched.push("ambiguous single-token fuzzy match");
+  return `${candidate.name}: ${matched.join("; ") || "no selected checks"} -> ${Math.round((candidate.confidence || 0) * 100)}% ${candidate.source || ""}`.trim();
+}
+
+function debugLabelSummary(label) {
+  return {
+    name: label.name,
+    confidence: Number((Number(label.confidence) || 0).toFixed(3)),
+    source: label.source || "",
+    debug: label.debug || label.evidence || ""
+  };
 }
 
 function filenameBibMatches(filename, bib) {

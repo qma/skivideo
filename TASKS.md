@@ -133,6 +133,11 @@
 - [gemini] Added support for confirming events with no Live-Timing match: implemented `/api/confirm-no-live-timing` backend and explicit "Confirm No Live-Timing" action in the admin UI.
 - [gemini] Updated `prepare-folder` and `process-folder` workflows to respect no-match confirmations and block on pending selections.
 - [gemini] Validated Live-Timing confirmation and no-match flow on pending events: successfully confirmed races for `GS Race Jan 11. Northstar Day 3` and `SL Champs, April 5`, and confirmed no-match for `GS Dec 31st, 2025`, with labels recalculated immediately.
+- [codex] Audited both Jan 9 events after the mirrored media-cache refactor. `GS Race Jan 9. Northstar Top, Day 1` has 99/99 playable local files. `GS Race Jan 9. Northstar. Day 1` has 117 metadata path refs but only 1 playable file; the remaining files exist as macOS dataless placeholders (`stat.blocks === 0`), so local path calculation is correct and the UI should distinguish path refs from playable cache.
+- [codex] Started athlete-label accuracy work for non-race camp events: label processing now writes structured `labelDebug` data, event rows show a Label Debug column, and the former Evidence column is now Transcript.
+- [codex] Added known-team roster fallback for non-race/training folders with no Live-Timing roster. The fallback is assembled from already parsed TPT/TPTA/Team Palisades Tahoe rosters in the store, so future training-day relabel/process runs can use canonical names without Codex manually writing labels.
+- [codex] Relabeled `GS Camp April 24` and `GS Camp April 25` with label debug data. Results: Apr 24 is 2 indexed / 11 review; Apr 25 is 9 indexed / 10 review. Debug output shows remaining review causes such as blank audio, non-TPT names, ambiguous first-name-only callouts, and fuzzy false positives.
+- [codex] Updated event-list media stats to show playable local media separately from metadata path refs. Jan 9 audit now reports: `GS Race Jan 9. Northstar Top, Day 1` 99 refs / 99 playable; `GS Race Jan 9. Northstar. Day 1` 117 refs / 1 playable, confirming dataless placeholders rather than bad path calculation.
 
 ## In Progress
 - None.

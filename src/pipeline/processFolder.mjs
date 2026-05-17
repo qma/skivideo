@@ -1,8 +1,9 @@
 import { nowIso, stableId } from "../lib/ids.mjs";
+import { normalizeText } from "../lib/text.mjs";
 import { ensureFolderManifest, ensureLiveTimingCorrelation, needsLiveTimingSelection } from "./eventDependencies.mjs";
 import { cacheTranscript, mirrorVideo, extractAudio } from "../adapters/media.mjs";
 import { transcribeAudio } from "../adapters/transcription.mjs";
-import { labelVideoAthletes } from "./labeler.mjs";
+import { labelVideoAthletesWithDebug } from "./labeler.mjs";
 import { buildTranscriptionPrompt, shouldUseTranscriptionPrompt } from "./transcriptionPrompt.mjs";
 
 export async function processFolder(config, store, folderId, options = {}) {
@@ -68,7 +69,7 @@ export async function processFolder(config, store, folderId, options = {}) {
   }
 
   state = await store.read();
-  folder = state.folders.find((item) => item.id === folderId);
+  folder = withFallbackRoster(state, state.folders.find((item) => item.id === folderId));
   let videos = state.videos.filter((video) => video.folderId === folderId);
   if (!videos.length) {
     await store.updateJob(jobId, {
@@ -151,20 +152,20 @@ export async function processFolder(config, store, folderId, options = {}) {
 
 export async function relabelFolder(config, store, folderId) {
   const state = await store.read();
-  const folder = state.folders.find((item) => item.id === folderId);
+  const folder = withFallbackRoster(state, state.folders.find((item) => item.id === folderId));
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
   const videos = state.videos.filter((video) => video.folderId === folderId);
   let indexed = 0;
   let needsReview = 0;
   for (const video of videos) {
-    const athleteLabels = await labelVideoAthletes(config, video, folder);
+    const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder);
     const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
     const processing = {
       ...(video.processing || {}),
       status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
       relabeledAt: nowIso()
     };
-    await store.updateVideo(video.id, { athleteLabels, processing });
+    await store.updateVideo(video.id, { athleteLabels, labelDebug, processing });
     if (processing.status === "indexed") indexed += 1;
     else needsReview += 1;
   }
@@ -231,7 +232,9 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
     }
   }
 
-  next.athleteLabels = await labelVideoAthletes(config, next, folder);
+  const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, next, folder);
+  next.athleteLabels = athleteLabels;
+  next.labelDebug = labelDebug;
   if (next.transcript) {
     next.transcriptRef = {
       source: next.transcript.source,
@@ -266,4 +269,39 @@ async function lookupSharePointRootUrl(config, store, folder) {
   const team = state.teams.find((t) => t.id === teamId);
   if (team?.sharepointRootUrl) return team.sharepointRootUrl;
   return config.sharepointRootUrl;
+}
+
+function withFallbackRoster(state, folder) {
+  if (!folder || folder.candidateRoster?.length) return folder;
+  const teamId = folder.teamId || state.teams?.[0]?.id || "";
+  const roster = buildKnownTeamRoster(state, teamId);
+  if (!roster.length) return folder;
+  return {
+    ...folder,
+    candidateRoster: roster,
+    candidateRosterSource: "known_team_roster_fallback"
+  };
+}
+
+function buildKnownTeamRoster(state, teamId) {
+  const byName = new Map();
+  for (const folder of state.folders || []) {
+    if (teamId && folder.teamId && folder.teamId !== teamId) continue;
+    for (const racer of folder.candidateRoster || []) {
+      if (!isKnownTeamRacer(racer)) continue;
+      const key = normalizeText(racer.name);
+      if (!key || byName.has(key)) continue;
+      byName.set(key, {
+        ...racer,
+        source: racer.source || "known_team_roster_fallback"
+      });
+    }
+  }
+  return [...byName.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+function isKnownTeamRacer(racer) {
+  const team = String(racer.team || "").trim();
+  const club = String(racer.club || "").trim();
+  return [team, club].some((value) => /^(TPT|TPTA|PT)$/i.test(value) || /Team Palis/i.test(value));
 }
