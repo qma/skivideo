@@ -142,6 +142,7 @@
 - [codex] Installed `data/models/ggml-medium.bin` so the configured `WHISPER_MODEL_SIZE=medium` default is actually available to whisper.cpp. Reprocessed `GS Camp April 24` and `GS Camp April 25` local-only with medium; metadata now points all 32 camp videos at `ggml-medium.bin`, and sample raw whisper JSON reports `model.type: "medium"`.
 - [codex] Hardened whisper.cpp transcript writes so output is generated to a temp JSON and atomically renamed after successful parsing. Missing models now throw an explicit error instead of leaving stale `whisper-cpp.json` output that looks current.
 - [codex] Made Whisper model downloads config-driven: `scripts/download-models.sh` now reads `WHISPER_MODEL_SIZE` through `loadConfig()` and downloads the matching `ggml-<size>.bin`; `scripts/install-whisper.sh` invokes it. Backend detection now reports the exact configured missing-model path, and transcription fails with a direct `scripts/download-models.sh` instruction when the preferred whisper.cpp model is absent.
+- [codex] Changed roster-athlete label scoring to normalized probabilities. Roster candidates keep `rawScore` plus normalized `probability`, and `confidence` now uses that probability for roster-derived labels. Example validated on April camp rows: Alice raw `1.0` vs Alex raw `0.78` normalizes to Alice `0.562`, Alex `0.438`; both debug strings show raw and probability. Added smoke coverage for this normalization.
 
 ## In Progress
 - None.

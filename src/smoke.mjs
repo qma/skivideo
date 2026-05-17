@@ -57,6 +57,26 @@ if (ambiguousLabels.length !== 2 || ambiguousLabels.some((label) => label.confid
   throw new Error("Ambiguous one-word roster matches should require review.");
 }
 
+const normalizedLabels = deterministicLabels(
+  {
+    filename: "clip.mp4",
+    transcript: { text: "Alice!" }
+  },
+  {
+    candidateRoster: [
+      { name: "Alex Wong", bib: "73", team: "TPT", club: "Team Palis" },
+      { name: "Alice Nam", bib: "70", team: "TPT", club: "Team Palis" }
+    ]
+  }
+);
+
+const aliceLabel = normalizedLabels.find((label) => label.name === "Alice Nam");
+const alexLabel = normalizedLabels.find((label) => label.name === "Alex Wong");
+const probabilitySum = normalizedLabels.reduce((sum, label) => sum + (label.probability || label.confidence || 0), 0);
+if (!aliceLabel || !alexLabel || Math.abs(probabilitySum - 1) > 0.001 || aliceLabel.probability <= alexLabel.probability) {
+  throw new Error("Roster candidate probabilities should normalize raw fuzzy scores across athletes.");
+}
+
 const filenameRosterLabels = deterministicLabels(
   {
     filename: "IzzyBronitsky_run2.MOV",
