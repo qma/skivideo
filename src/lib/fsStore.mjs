@@ -9,7 +9,30 @@ const emptyStore = {
   videos: [],
   events: [],
   jobs: [],
-  teams: []
+  teams: [],
+  settings: {
+    labelPrompt: `Extract skier athlete names from a skiing video transcript. 
+Use the provided candidate roster as the canonical source for names and spellings. 
+The event venue is {{venue}}, discipline is {{discipline}}, and date is {{date}}.
+Focus on identifying athletes actually featured in the video or explicitly called out as "in the gate", "on course", etc.
+Allow for fuzzy/phonetic matches based on common transcription errors.
+
+Output up to the top 5 candidates as a JSON array of objects. 
+Each object MUST have: 
+"name" (canonical name from roster), 
+"probability" (0-1), 
+"evidence" (short snippet from transcript),
+"thought" (1-sentence reasoning why this athlete matches, e.g. "Transcript heard 'Zosia' which is a unique first name match for Zosia Buchanan"),
+"matchedRoster" (boolean).
+The "probability" values across all candidates in the list MUST sum to 1.0 (Bayesian normalization).
+Return COMPACT JSON ONLY. No preamble.
+
+Input Data:
+Filename: {{filename}}
+Transcript: {{transcript}}
+Roster:
+{{roster}}`
+  }
 };
 
 export class JsonStore {
@@ -61,6 +84,15 @@ export class JsonStore {
       }
       store.folders = [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
       return store;
+    });
+  }
+
+  async updateSettings(patch) {
+    return this.mutationQueue = this.mutationQueue.then(async () => {
+      const store = await this.read();
+      store.settings = { ...store.settings, ...patch };
+      await this.write(store);
+      return store.settings;
     });
   }
 

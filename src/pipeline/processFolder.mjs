@@ -102,7 +102,7 @@ export async function processFolder(config, store, folderId, options = {}) {
     cursor += 1;
     if (!video) return;
     try {
-      const processed = await processVideo(config, video, folder, options, rootUrl);
+      const processed = await processVideo(config, video, folder, options, rootUrl, store);
       await enqueueWrite(() => store.updateVideo(video.id, processed));
       if (processed.processing.status === "indexed") indexed += 1;
       else needsReview += 1;
@@ -176,7 +176,7 @@ export async function relabelFolder(config, store, folderId, options = {}) {
 
     for (let i = 0; i < videos.length; i++) {
       const video = videos[i];
-      const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder);
+      const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder, store);
       const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
       const processing = {
         ...(video.processing || {}),
@@ -217,7 +217,7 @@ export async function relabelFolder(config, store, folderId, options = {}) {
   }
 }
 
-export async function processVideo(config, video, folder, options = {}, rootUrl = config.sharepointRootUrl) {
+export async function processVideo(config, video, folder, options = {}, rootUrl = config.sharepointRootUrl, store = null) {
   const next = structuredClone(video);
   const errors = [];
   const forceTranscribe = Boolean(options.forceTranscribe);
@@ -227,7 +227,9 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
     ? buildTranscriptionPrompt(config, folder, options)
     : null;
   const transcriptionOptions = {
-    whisperCppNoGpu: options.whisperCppNoGpu
+    whisperCppNoGpu: options.whisperCppNoGpu,
+    modelSize: config.whisperModelSize,
+    backend: config.whisperBackend
   };
   if (promptInfo) {
     Object.assign(transcriptionOptions, {
@@ -277,7 +279,7 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
     }
   }
 
-  const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, next, folder);
+  const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, next, folder, store);
   next.athleteLabels = athleteLabels;
   next.labelDebug = labelDebug;
   if (next.transcript) {

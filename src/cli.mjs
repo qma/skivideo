@@ -244,7 +244,7 @@ async function processSingleVideo(videoId) {
   const video = state.videos.find((item) => item.id === videoId);
   if (!video) throw new Error(`Video not found: ${videoId}`);
   const folder = state.folders.find((item) => item.id === video.folderId);
-  const processed = await processVideo(config, video, folder);
+  const processed = await processVideo(config, video, folder, {}, config.sharepointRootUrl, store);
   await store.updateVideo(video.id, processed);
   printJson({
     id: processed.id,

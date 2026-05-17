@@ -28,6 +28,14 @@ app.get("/api/config", asyncRoute(async () => ({
   ...publicConfig(config),
   transcriptionBackends: await detectTranscriptionBackends(config)
 })));
+app.get("/api/settings", asyncRoute(async () => {
+  const state = await store.read();
+  return { ok: true, settings: state.settings || {} };
+}));
+app.post("/api/settings", asyncRoute(async (req) => {
+  const settings = await store.updateSettings(req.body.settings || {});
+  return { ok: true, settings };
+}));
 app.get("/api/store", asyncRoute(() => store.read()));
 app.get("/api/summary", asyncRoute(() => summary()));
 app.get("/api/job", asyncRoute((req) => jobDetail(req.query.id || "")));

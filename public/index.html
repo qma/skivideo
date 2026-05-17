@@ -104,6 +104,15 @@
           <div id="events" class="list compact"></div>
         </div>
       </section>
+
+      <section class="panel">
+        <div class="sectionHead">
+          <h2>LLM Prompt Settings</h2>
+          <button id="saveSettings" class="actionLink">Save Prompt</button>
+        </div>
+        <p class="muted">Configure the system prompt used for Gemini LLM labeling. Supported macros: <code>{{roster}}</code>, <code>{{filename}}</code>, <code>{{transcript}}</code>, <code>{{venue}}</code>, <code>{{discipline}}</code>, <code>{{date}}</code>.</p>
+        <textarea id="labelPromptInput" class="settingsTextarea" rows="15"></textarea>
+      </section>
     </main>
 
     <dialog id="logDialog">

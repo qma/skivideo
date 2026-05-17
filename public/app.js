@@ -101,6 +101,7 @@ function bindActions() {
     state.query = event.target.value;
     await renderSearch();
   });
+  el("saveSettings").addEventListener("click", saveSettings);
 }
 
 async function refresh() {
@@ -116,6 +117,22 @@ async function refresh() {
   renderJobsAndEvents();
   await renderSearch();
   scheduleJobPolling();
+  loadSettings();
+}
+
+async function loadSettings() {
+  const data = await api("/api/settings");
+  if (data?.settings?.labelPrompt) {
+    el("labelPromptInput").value = data.settings.labelPrompt;
+  }
+}
+
+async function saveSettings() {
+  const labelPrompt = el("labelPromptInput").value;
+  const result = await action("/api/settings", { settings: { labelPrompt } });
+  if (result?.ok) {
+    showLog({ ok: true, message: "LLM prompt settings saved successfully." });
+  }
 }
 
 function renderStatus() {

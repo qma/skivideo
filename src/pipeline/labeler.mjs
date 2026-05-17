@@ -1,19 +1,19 @@
 import { includesName, normalizeText, tokenizeName } from "../lib/text.mjs";
 import { bestFuzzyRosterMatch } from "../lib/fuzzyNames.mjs";
 
-export async function labelVideoAthletes(config, video, folder) {
-  const result = await labelVideoAthletesWithDebug(config, video, folder);
+export async function labelVideoAthletes(config, video, folder, store) {
+  const result = await labelVideoAthletesWithDebug(config, video, folder, store);
   return result.labels;
 }
 
-export async function labelVideoAthletesWithDebug(config, video, folder) {
+export async function labelVideoAthletesWithDebug(config, video, folder, store) {
   const heuristic = heuristicLabelsWithDebug(video, folder);
   const debug = heuristic.debug;
   const heuristicLabelsOnly = heuristic.labels;
 
   if (config.geminiApiKey && (process.env.LLM_LABEL_MODE === "always" || !heuristicLabelsOnly.length)) {
     try {
-      const geminiLabels = await labelWithGemini(config, video, folder);
+      const geminiLabels = await labelWithGemini(config, video, folder, store);
       const labels = mergeLabels(heuristicLabelsOnly, geminiLabels);
       debug.gemini = { mode: process.env.LLM_LABEL_MODE === "always" ? "always" : "fallback", labels: geminiLabels.length };
       debug.finalLabels = labels.map(debugLabelSummary);
@@ -196,32 +196,22 @@ function heuristicLabelsWithDebug(video, folder) {
   return { labels: finalLabels, debug };
 }
 
-async function labelWithGemini(config, video, folder) {
-  const roster = (folder?.candidateRoster || [])
+async function labelWithGemini(config, video, folder, store) {
+  const state = await store.read();
+  const promptTemplate = state.settings?.labelPrompt || "";
+  if (!promptTemplate) return [];
+
+  const rosterText = (folder?.candidateRoster || [])
     .map((racer) => `${racer.name}${racer.bib ? ` bib ${racer.bib}` : ""}${racer.team || racer.club ? ` team ${racer.team || racer.club}` : ""}`)
     .join("\n");
 
-  const systemPrompt = `Extract skier athlete names from a skiing video transcript. 
-Use the provided candidate roster as the canonical source for names and spellings. 
-The event venue is ${folder?.eventMatch?.venue || "unknown"}, discipline is ${folder?.eventMatch?.discipline || "unknown"}, and date is ${folder?.eventMatch?.date || "unknown"}.
-Focus on identifying athletes actually featured in the video or explicitly called out as "in the gate", "on course", etc.
-Allow for fuzzy/phonetic matches based on common transcription errors.
-
-Output up to the top 5 candidates as a JSON array of objects. 
-Each object MUST have: 
-"name" (canonical name from roster), 
-"probability" (0-1), 
-"evidence" (short snippet from transcript),
-"thought" (1-sentence reasoning why this athlete matches, e.g. "Transcript heard 'Zosia' which is a unique first name match for Zosia Buchanan"),
-"matchedRoster" (boolean).
-The "probability" values across all candidates in the list MUST sum to 1.0 (Bayesian normalization).
-Return COMPACT JSON ONLY. No preamble.`;
-
-  const userContent = {
-    filename: video.filename,
-    transcript: video.transcript?.text || "",
-    candidateRoster: roster
-  };
+  const prompt = promptTemplate
+    .replaceAll("{{roster}}", rosterText)
+    .replaceAll("{{filename}}", video.filename || "")
+    .replaceAll("{{transcript}}", video.transcript?.text || "")
+    .replaceAll("{{venue}}", folder?.eventMatch?.venue || "unknown")
+    .replaceAll("{{discipline}}", folder?.eventMatch?.discipline || "unknown")
+    .replaceAll("{{date}}", folder?.eventMatch?.date || "unknown");
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiLabelModel}:generateContent?key=${config.geminiApiKey}`;
 
@@ -232,7 +222,7 @@ Return COMPACT JSON ONLY. No preamble.`;
       contents: [
         {
           role: "user",
-          parts: [{ text: `${systemPrompt}\n\nInput Data:\n${JSON.stringify(userContent, null, 2)}` }]
+          parts: [{ text: prompt }]
         }
       ],
       generationConfig: {
