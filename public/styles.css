@@ -253,10 +253,10 @@ select {
   color: var(--accent-dark);
 }
 
-.deleteActionLink {
+.resetActionLink {
   border-color: #e4b8b8;
-  background: #fff0f0;
-  color: var(--bad);
+  background: #fff7e8;
+  color: #8a5b00;
 }
 
 .actionLink:hover {
@@ -267,8 +267,8 @@ select {
   background: #eef5f4;
 }
 
-.deleteActionLink:hover {
-  background: #ffe5e5;
+.resetActionLink:hover {
+  background: #ffefd1;
 }
 
 .statusBadge {

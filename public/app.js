@@ -18,7 +18,7 @@ const actionTips = {
   prepare: "Run View and Live dependencies if needed, then relabel from existing metadata/transcripts. Does not download media.",
   process: "Run View, Live, and Prepare dependencies if needed, then download/mirror videos, transcribe, label, and update the index with parallel 4.",
   reprocess: "Force retranscription and relabeling from existing local media/audio only. Does not download missing media.",
-  delete: "Remove this folder and all its videos from the index. Does not delete local media files on disk."
+  reset: "Clear videos, labels, transcripts, Live-Timing correlation, jobs, and derived metadata for this event. Keeps the discovered source folder and does not delete local media files on disk."
 };
 
 const el = (id) => document.getElementById(id);
@@ -161,7 +161,7 @@ function renderFolders() {
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("reprocess", folder.id))}" title="${escapeAttr(actionTips.reprocess)}" aria-label="${escapeAttr(actionTips.reprocess)}">Re-Process</a>
-          <a class="actionLink deleteActionLink" href="${escapeAttr(actionHref("delete", folder.id))}" title="${escapeAttr(actionTips.delete)}" aria-label="${escapeAttr(actionTips.delete)}">Delete</a>
+          <a class="actionLink resetActionLink" href="${escapeAttr(actionHref("reset", folder.id))}" title="${escapeAttr(actionTips.reset)}" aria-label="${escapeAttr(actionTips.reset)}">Reset</a>
         </div>
       </article>
     `;
@@ -439,12 +439,17 @@ async function startReprocessing(folderId) {
   if (result?.ok) scheduleJobPolling(true);
 }
 
-async function deleteFolder(folderId) {
+async function resetFolder(folderId) {
   const folder = state.summary?.folders?.find((item) => item.id === folderId);
   const name = folder?.name || folderId;
-  const confirmed = window.confirm(`Permanently remove "${name}" and all its videos from the index? Local media files on disk will NOT be deleted.`);
+  const confirmed = window.confirm(`Reset "${name}" to just-discovered state? This clears videos, labels, transcripts, Live-Timing metadata, and jobs from the index. Local media files on disk will NOT be deleted.`);
   if (!confirmed) return;
-  await action("/api/delete-folder", { folderId });
+  if (state.selectedFolderId === folderId) {
+    state.selectedFolderId = "";
+    state.eventDetail = null;
+    renderEventView();
+  }
+  await action("/api/reset-folder", { folderId });
 }
 
 async function runUrlAction() {
@@ -469,8 +474,8 @@ async function runUrlAction() {
     await startProcessing(folderId);
   } else if (actionName === "reprocess") {
     await startReprocessing(folderId);
-  } else if (actionName === "delete") {
-    await deleteFolder(folderId);
+  } else if (actionName === "reset") {
+    await resetFolder(folderId);
   }
 }
 

@@ -80,6 +80,15 @@ export class JsonStore {
     });
   }
 
+  async resetFolder(folderId) {
+    return this.mutate((store) => {
+      store.folders = store.folders.map((folder) => folder.id === folderId ? resetDiscoveredFolder(folder) : folder);
+      store.videos = store.videos.filter((video) => video.folderId !== folderId);
+      store.jobs = store.jobs.filter((job) => job.folderId !== folderId);
+      return store;
+    });
+  }
+
   async upsertVideos(videos) {
     return this.mutate((store) => {
       const byId = new Map(store.videos.map((video) => [video.id, video]));
@@ -583,6 +592,41 @@ function mergeFolder(existing = {}, incoming = {}) {
     merged.eventMatch = deepMerge(existing.eventMatch, incoming.eventMatch);
   }
   return merged;
+}
+
+function resetDiscoveredFolder(folder = {}) {
+  return {
+    id: folder.id,
+    teamId: folder.teamId,
+    source: folder.source,
+    name: folder.name,
+    path: folder.path,
+    serverRelativeUrl: folder.serverRelativeUrl,
+    sharepointUrl: folder.sharepointUrl,
+    itemCount: folder.itemCount,
+    timeCreated: folder.timeCreated,
+    timeLastModified: folder.timeLastModified,
+    discoveredAt: folder.discoveredAt,
+    eventMatch: resetDiscoveredEventMatch(folder.eventMatch),
+    raceAssets: [],
+    candidateRoster: []
+  };
+}
+
+function resetDiscoveredEventMatch(eventMatch) {
+  if (!eventMatch) return null;
+  const discoveredSources = (eventMatch.sources || []).filter((source) => source === "sharepoint_folder_name");
+  const discoveredReasons = (eventMatch.reasons || []).filter((reason) => /inferred from SharePoint folder name/i.test(reason));
+  if (!discoveredSources.length && !discoveredReasons.length) return null;
+  return {
+    canonicalName: eventMatch.canonicalName || "",
+    date: eventMatch.date || "",
+    venue: eventMatch.venue || "",
+    discipline: eventMatch.discipline || "",
+    confidence: eventMatch.date ? 0.45 : 0.3,
+    reasons: discoveredReasons,
+    sources: discoveredSources
+  };
 }
 
 function deepMerge(base, patch) {

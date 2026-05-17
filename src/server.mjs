@@ -132,6 +132,16 @@ app.post("/api/delete-folder", asyncRoute(async (req) => {
   await store.removeFolder(req.body.folderId);
   return { ok: true, folderId: req.body.folderId };
 }));
+app.post("/api/reset-folder", asyncRoute(async (req) => {
+  console.log("Reset folder requested:", req.body.folderId);
+  if (!req.body.folderId) throw new Error("folderId is required.");
+  await store.resetFolder(req.body.folderId);
+  return {
+    ok: true,
+    folderId: req.body.folderId,
+    message: "Folder reset to discovered state. Local media files on disk were not deleted."
+  };
+}));
 app.post("/api/review-video", asyncRoute((req) => reviewVideo(req.body)));
 app.post("/api/bulk-review", asyncRoute(async (req) => {
   if (!req.body.folderId) throw new Error("folderId is required.");
