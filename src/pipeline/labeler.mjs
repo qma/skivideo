@@ -312,10 +312,10 @@ function debugLabelSummary(label) {
 
 function candidateRawScore({ inTranscript, inFilename, filenameRoster, filenameRosterMatch, bibMatch, fuzzy, fuzzyMatch }) {
   const scores = [];
-  if (inTranscript) scores.push(1);
-  if (inFilename) scores.push(0.9);
+  if (inTranscript) scores.push(2);
+  if (inFilename) scores.push(1.5);
   if (filenameRosterMatch) scores.push(filenameRoster.score || filenameRoster.confidence || 0);
-  if (bibMatch) scores.push(0.75);
+  if (bibMatch) scores.push(1.2);
   if (fuzzyMatch) scores.push(fuzzy.score || 0);
   return Math.max(0, ...scores);
 }
