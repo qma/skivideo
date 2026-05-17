@@ -138,6 +138,7 @@
 - [codex] Added known-team roster fallback for non-race/training folders with no Live-Timing roster. The fallback is assembled from already parsed TPT/TPTA/Team Palisades Tahoe rosters in the store, so future training-day relabel/process runs can use canonical names without Codex manually writing labels.
 - [codex] Relabeled `GS Camp April 24` and `GS Camp April 25` with label debug data. Results: Apr 24 is 2 indexed / 11 review; Apr 25 is 9 indexed / 10 review. Debug output shows remaining review causes such as blank audio, non-TPT names, ambiguous first-name-only callouts, and fuzzy false positives.
 - [codex] Updated event-list media stats to show playable local media separately from metadata path refs. Jan 9 audit now reports: `GS Race Jan 9. Northstar Top, Day 1` 99 refs / 99 playable; `GS Race Jan 9. Northstar. Day 1` 117 refs / 1 playable, confirming dataless placeholders rather than bad path calculation.
+- [codex] Added an event roster export asset: events with `candidateRoster` now show an `Extracted roster: N racers` asset in the event view, backed by `/api/event-roster.csv?folderId=...`.
 
 ## In Progress
 - None.

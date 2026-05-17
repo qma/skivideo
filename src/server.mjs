@@ -31,6 +31,7 @@ app.get("/api/store", asyncRoute(() => store.read()));
 app.get("/api/summary", asyncRoute(() => summary()));
 app.get("/api/job", asyncRoute((req) => jobDetail(req.query.id || "")));
 app.get("/api/event", asyncRoute((req) => eventDetail(req.query.folderId || "")));
+app.get("/api/event-roster.csv", asyncRoute((req, res) => eventRosterCsv(req, res)));
 app.get("/api/search", asyncRoute((req) => search(req.query.q || "")));
 
 app.post("/api/ingest-sample", asyncRoute(async () => {
@@ -328,7 +329,7 @@ async function summary() {
       timeLastModified: folder.timeLastModified,
       discoveredAt: folder.discoveredAt,
       eventMatch: folder.eventMatch,
-      raceAssetCount: folder.raceAssets?.length || 0,
+      raceAssetCount: eventAssets(folder).length,
       candidateRosterCount: folder.candidateRoster?.length || 0,
       stats: folderStats.get(folder.id) || {
         videoCount: 0,
@@ -403,7 +404,10 @@ async function eventDetail(folderId) {
   const folder = state.folders.find((item) => item.id === folderId);
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
   return {
-    folder,
+    folder: {
+      ...folder,
+      raceAssets: eventAssets(folder)
+    },
     videos: await Promise.all(state.videos
       .filter((video) => video.folderId === folderId)
       .map(async (video) => ({
@@ -416,6 +420,53 @@ async function eventDetail(folderId) {
           } : video.transcript
         })))
   };
+}
+
+async function eventRosterCsv(req, res) {
+  const folderId = req.query.folderId || "";
+  if (!folderId) throw new Error("folderId is required.");
+  const state = await store.read();
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) throw new Error(`Folder not found: ${folderId}`);
+  const roster = folder.candidateRoster || [];
+  if (!roster.length) {
+    res.status(404).type("text/plain").send("No extracted roster is available for this event.");
+    return;
+  }
+  const filename = safeDownloadName(`${folder.name || folderId}-roster.csv`);
+  res.setHeader("content-type", "text/csv; charset=utf-8");
+  res.setHeader("content-disposition", `attachment; filename="${filename}"`);
+  res.send(rosterToCsv(roster));
+}
+
+function eventAssets(folder) {
+  const assets = [...(folder.raceAssets || [])];
+  if (folder.candidateRoster?.length) {
+    assets.unshift({
+      type: "extracted_roster",
+      label: `Extracted roster: ${folder.candidateRoster.length} racers`,
+      sourceUrl: `/api/event-roster.csv?folderId=${encodeURIComponent(folder.id)}`,
+      localPath: "",
+      racerCount: folder.candidateRoster.length
+    });
+  }
+  return assets;
+}
+
+function rosterToCsv(roster) {
+  const columns = ["bib", "name", "team", "club", "category", "ussaNumber", "raceGender", "raceName", "raceId", "raceSourceUrl"];
+  return [
+    columns.join(","),
+    ...roster.map((racer) => columns.map((column) => csvCell(racer[column])).join(","))
+  ].join("\n");
+}
+
+function csvCell(value) {
+  return `"${String(value || "").replaceAll('"', '""')}"`;
+}
+
+function safeDownloadName(value) {
+  return String(value || "roster.csv").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "roster.csv";
 }
 
 async function serveMedia(req, res, videoId) {
