@@ -322,10 +322,10 @@ function candidateRawScore({ inTranscript, inFilename, filenameRoster, filenameR
 
 function normalizeRosterProbabilities(entries) {
   const selected = entries.filter((entry) => entry.candidate.selected && entry.candidate.rawScore > 0);
-  const total = selected.reduce((sum, entry) => sum + entry.candidate.rawScore, 0);
-  if (!total) return;
+  if (!selected.length) return;
+  const total = selected.reduce((sum, entry) => sum + Math.exp(entry.candidate.rawScore), 0);
   for (const entry of selected) {
-    const probability = entry.candidate.rawScore / total;
+    const probability = Math.exp(entry.candidate.rawScore) / total;
     entry.candidate.probability = Number(probability.toFixed(6));
     entry.candidate.confidence = Number(probability.toFixed(6));
     entry.label.probability = probability;
