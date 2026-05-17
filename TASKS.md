@@ -128,6 +128,7 @@
 - [codex] Updated preview behavior so source SharePoint videos use the same lazy dialog player as local cached videos.
 - [codex] Replaced the event-list Delete action with Reset, which clears event videos, labels, transcripts, jobs, Live-Timing metadata, roster/assets, and derived index data while preserving the discovered source folder.
 - [codex] Added Live-Timing admin confirmation for ambiguous matches: auto-apply only at most one Men and one Women race, otherwise store candidates and block relabel/process until an admin confirms the actual races.
+- [codex] Migrated all currently over-matched local events into Live-Timing confirmation state and cleared stale labels; confirmation now resumes by recalculating athlete labels immediately after the admin selects races.
 
 ## In Progress
 - None.

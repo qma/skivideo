@@ -61,9 +61,15 @@ app.post("/api/correlate-folder-live-timing", asyncRoute(async (req) => {
     assets: correlation.assets
   };
 }));
-app.post("/api/confirm-live-timing", asyncRoute(async (req) => (
-  confirmLiveTimingSelection(config, store, req.body.folderId, req.body.raceIds || [])
-)));
+app.post("/api/confirm-live-timing", asyncRoute(async (req) => {
+  const confirmation = await confirmLiveTimingSelection(config, store, req.body.folderId, req.body.raceIds || []);
+  const relabel = await relabelFolder(config, store, req.body.folderId);
+  return {
+    ...confirmation,
+    relabel,
+    message: `${confirmation.message}; recalculated ${relabel.indexed} indexed and ${relabel.needsReview} review label status${relabel.videos === 1 ? "" : "es"}`
+  };
+}));
 app.post("/api/list-sharepoint", asyncRoute(async () => {
   const folders = await listRootEventFolders(config);
   await store.upsertFolders(folders);
