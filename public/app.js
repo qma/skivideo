@@ -16,6 +16,7 @@ const actionTips = {
   view: "Ensure the SharePoint video list if missing, then open this event's table. Does not download media.",
   live: "Refresh Live-Timing race correlation, racer roster, and linked assets. Does not download media.",
   prepare: "Run View and Live dependencies if needed, then relabel from existing metadata/transcripts. Does not download media.",
+  relabel: "Rerun only athlete scoring and labeling from existing transcripts, rosters, and filenames. Does not fetch Live-Timing, download media, or transcribe audio.",
   process: "Run View, Live, and Prepare dependencies if needed, then download/mirror videos, transcribe, label, and update the index with parallel 4.",
   reprocess: "Force retranscription and relabeling from existing local media/audio only. Does not download missing media.",
   reset: "Clear videos, labels, transcripts, Live-Timing correlation, jobs, and derived metadata for this event. Keeps the discovered source folder and does not delete local media files on disk."
@@ -165,6 +166,7 @@ function renderFolders() {
           <a class="actionLink" href="${escapeAttr(actionHref("view", folder.id))}" title="${escapeAttr(actionTips.view)}" aria-label="${escapeAttr(actionTips.view)}">View</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("live", folder.id))}" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("relabel", folder.id))}" title="${escapeAttr(actionTips.relabel)}" aria-label="${escapeAttr(actionTips.relabel)}">Relabel</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
           <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("reprocess", folder.id))}" title="${escapeAttr(actionTips.reprocess)}" aria-label="${escapeAttr(actionTips.reprocess)}">Re-Process</a>
           <a class="actionLink resetActionLink" href="${escapeAttr(actionHref("reset", folder.id))}" title="${escapeAttr(actionTips.reset)}" aria-label="${escapeAttr(actionTips.reset)}">Reset</a>
@@ -517,6 +519,13 @@ async function startReprocessing(folderId) {
   if (result?.ok) scheduleJobPolling(true);
 }
 
+async function relabelFolder(folderId) {
+  const result = await action("/api/relabel-folder", { folderId });
+  if (result?.folderId) {
+    await refresh();
+  }
+}
+
 async function resetFolder(folderId) {
   const folder = state.summary?.folders?.find((item) => item.id === folderId);
   const name = folder?.name || folderId;
@@ -548,6 +557,8 @@ async function runUrlAction() {
     await action("/api/correlate-folder-live-timing", { folderId });
   } else if (actionName === "prepare") {
     await action("/api/prepare-folder", { folderId });
+  } else if (actionName === "relabel") {
+    await relabelFolder(folderId);
   } else if (actionName === "process") {
     await startProcessing(folderId);
   } else if (actionName === "reprocess") {
