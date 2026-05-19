@@ -45,13 +45,24 @@ function restart() {
   restarting = true;
   console.log("Change detected. Restarting server...");
   const previous = child;
-  previous?.once("exit", () => {
+  let started = false;
+  const startNext = () => {
+    if (started) return;
+    started = true;
     restarting = false;
     start();
-  });
-  previous?.kill("SIGTERM");
+  };
+  if (!previous || previous.exitCode !== null || previous.signalCode !== null) {
+    startNext();
+    return;
+  }
+  previous.once("exit", startNext);
+  previous.kill("SIGTERM");
   setTimeout(() => {
-    if (restarting) previous?.kill("SIGKILL");
+    if (!started) {
+      previous.kill("SIGKILL");
+      startNext();
+    }
   }, 5000).unref();
 }
 
