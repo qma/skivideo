@@ -101,6 +101,7 @@ function bindActions() {
     state.query = event.target.value;
     await renderSearch();
   });
+  el("openSettings").addEventListener("click", () => el("settingsDialog").showModal());
   el("saveSettings").addEventListener("click", saveSettings);
 }
 
@@ -131,6 +132,7 @@ async function saveSettings() {
   const labelPrompt = el("labelPromptInput").value;
   const result = await action("/api/settings", { settings: { labelPrompt } });
   if (result?.ok) {
+    el("settingsDialog").close();
     showLog({ ok: true, message: "LLM prompt settings saved successfully." });
   }
 }

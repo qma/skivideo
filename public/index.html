@@ -20,6 +20,7 @@
         <button id="ingestOldest">Ingest Oldest</button>
         <button id="exportLean">Export Lean Index</button>
         <button id="syncMetadata">Sync Metadata</button>
+        <button id="openSettings">Settings</button>
         <a id="publicPreviewLink" href="/public-preview/" target="_blank" class="subtleButton">Public Preview</a>
       </div>
     </header>
@@ -104,20 +105,25 @@
           <div id="events" class="list compact"></div>
         </div>
       </section>
-
-      <section class="panel">
-        <div class="sectionHead">
-          <h2>LLM Prompt Settings</h2>
-          <button id="saveSettings" class="actionLink">Save Prompt</button>
-        </div>
-        <p class="muted">Configure the system prompt used for Gemini LLM labeling. Supported macros: <code>{{roster}}</code>, <code>{{filename}}</code>, <code>{{transcript}}</code>, <code>{{venue}}</code>, <code>{{discipline}}</code>, <code>{{date}}</code>.</p>
-        <textarea id="labelPromptInput" class="settingsTextarea" rows="15"></textarea>
-      </section>
     </main>
 
     <dialog id="logDialog">
       <pre id="logOutput"></pre>
       <form method="dialog"><button>Close</button></form>
+    </dialog>
+
+    <dialog id="settingsDialog" class="settingsDialog">
+      <div class="modalHeader">
+        <h2>LLM Prompt Settings</h2>
+        <form method="dialog"><button>Close</button></form>
+      </div>
+      <div class="modalBody">
+        <p class="muted">Configure the system prompt used for Gemini LLM labeling. Supported macros: <code>{{roster}}</code>, <code>{{filename}}</code>, <code>{{transcript}}</code>, <code>{{venue}}</code>, <code>{{discipline}}</code>, <code>{{date}}</code>.</p>
+        <textarea id="labelPromptInput" class="settingsTextarea" rows="18"></textarea>
+      </div>
+      <div class="modalFooter">
+        <button id="saveSettings" class="actionLink">Save Changes</button>
+      </div>
     </dialog>
 
     <dialog id="mediaPreviewDialog" class="mediaPreviewDialog">
