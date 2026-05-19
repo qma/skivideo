@@ -13,9 +13,8 @@ export async function labelVideoAthletesWithDebug(config, video, folder, store) 
 
   if (config.geminiApiKey && (process.env.LLM_LABEL_MODE === "always" || !heuristicLabelsOnly.length)) {
     try {
-      const geminiLabels = await labelWithGemini(config, video, folder, store);
+      const { labels: geminiLabels, usage } = await labelWithGemini(config, video, folder, store);
       const labels = mergeLabels(heuristicLabelsOnly, geminiLabels);
-      const usage = geminiLabels[0]?.usage;
       debug.gemini = {
         mode: process.env.LLM_LABEL_MODE === "always" ? "always" : "fallback",
         labels: geminiLabels.length,
@@ -204,7 +203,7 @@ function heuristicLabelsWithDebug(video, folder) {
 async function labelWithGemini(config, video, folder, store) {
   const state = await store.read();
   const promptTemplate = state.settings?.labelPrompt || "";
-  if (!promptTemplate) return [];
+  if (!promptTemplate) return { labels: [], usage: null };
 
   const rosterText = (folder?.candidateRoster || [])
     .map((racer) => `${racer.name}${racer.bib ? ` bib ${racer.bib}` : ""}${racer.team || racer.club ? ` team ${racer.team || racer.club}` : ""}`)
@@ -243,7 +242,7 @@ async function labelWithGemini(config, video, folder, store) {
   const json = await response.json();
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
   const parsed = JSON.parse(text);
-  const labels = Array.isArray(parsed) ? parsed : (parsed.labels || []);
+  const labelsRaw = Array.isArray(parsed) ? parsed : (parsed.labels || []);
 
   const usage = json.usageMetadata || {};
   const stats = {
@@ -259,13 +258,14 @@ async function labelWithGemini(config, video, folder, store) {
   const outputCost = stats.candidatesTokens * 0.0000004;
   stats.estimatedCost = Number((inputCost + cachedCost + outputCost).toFixed(6));
 
-  return labels.map((label) => ({
+  const labels = labelsRaw.map((label) => ({
     ...label,
     confidence: label.probability || 0,
     source: "gemini_llm_audio_roster_reasoning",
-    methodVersion: `gemini-${config.geminiLabelModel}-v1`,
-    usage: stats
+    methodVersion: `gemini-${config.geminiLabelModel}-v1`
   }));
+
+  return { labels, usage: stats };
 }
 
 async function labelWithOpenAi(config, video, folder) {
@@ -363,7 +363,12 @@ function dedupeLabels(labels) {
 }
 
 function mergeLabels(...groups) {
-  return dedupeLabels(groups.flat()).sort((a, b) => b.confidence - a.confidence);
+  const flattened = groups.flat();
+  const llmLabels = flattened.filter((l) => l.source && (l.source.includes("gemini") || l.source.includes("openai")));
+  if (llmLabels.length > 0) {
+    return dedupeLabels(llmLabels).sort((a, b) => b.confidence - a.confidence);
+  }
+  return dedupeLabels(flattened).sort((a, b) => b.confidence - a.confidence);
 }
 
 function scoreReason(candidate) {
