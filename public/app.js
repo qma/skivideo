@@ -552,7 +552,7 @@ async function startReprocessing(folderId) {
 }
 
 async function relabelFolder(folderId) {
-  const result = await action("/api/relabel-folder-async", { folderId });
+  const result = await action("/api/relabel-folder-async", { folderId, parallel: 4 });
   if (result?.ok) scheduleJobPolling(true);
 }
 
@@ -765,6 +765,12 @@ function playbackHref(video) {
 function renderLabelDebug(debug, bestLabel) {
   const lines = [];
   if (bestLabel?.thought) lines.push(`LLM: ${bestLabel.thought}`);
+  const gemini = debug?.gemini || {};
+  if (gemini.usage) {
+    const u = gemini.usage;
+    const cacheHit = u.promptTokens > 0 ? Math.round((u.cachedPromptTokens / u.promptTokens) * 100) : 0;
+    lines.push(`Tokens: ${u.totalTokens} (${cacheHit}% cache hit) · Cost: $${u.estimatedCost}`);
+  }
   if (bestLabel?.debug) lines.push(bestLabel.debug);
   const final = (debug?.finalLabels || []).find((label) => normalizeClientText(label.name) === normalizeClientText(bestLabel?.name || ""));
   if (final?.debug && final.debug !== bestLabel?.debug) lines.push(final.debug);

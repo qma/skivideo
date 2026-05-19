@@ -152,6 +152,8 @@ export async function processFolder(config, store, folderId, options = {}) {
 
 export async function relabelFolder(config, store, folderId, options = {}) {
   const startedAt = nowIso();
+  const requestedParallel = Number(options.parallel || 4);
+  const parallel = Number.isFinite(requestedParallel) ? Math.max(1, Math.min(16, Math.floor(requestedParallel))) : 4;
   const jobId = options.jobId || stableId("job", `relabel:${folderId}:${startedAt}`);
   if (!options.jobId) {
     await store.addJob({
@@ -161,8 +163,8 @@ export async function relabelFolder(config, store, folderId, options = {}) {
       status: "running",
       startedAt,
       updatedAt: startedAt,
-      parallel: 1,
-      message: "Relabeling started"
+      parallel,
+      message: `Relabeling started with ${parallel} workers`
     });
   }
 
@@ -173,9 +175,14 @@ export async function relabelFolder(config, store, folderId, options = {}) {
     const videos = state.videos.filter((video) => video.folderId === folderId);
     let indexed = 0;
     let needsReview = 0;
+    let cursor = 0;
 
-    for (let i = 0; i < videos.length; i++) {
-      const video = videos[i];
+    async function processNext() {
+      const video = videos[cursor];
+      const index = cursor;
+      cursor += 1;
+      if (!video) return;
+
       const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder, store);
       const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
       const processing = {
@@ -187,15 +194,18 @@ export async function relabelFolder(config, store, folderId, options = {}) {
       if (processing.status === "indexed") indexed += 1;
       else needsReview += 1;
 
-      if ((i + 1) % 10 === 0 || i === videos.length - 1) {
+      if ((index + 1) % 5 === 0 || index === videos.length - 1) {
         await store.updateJob(jobId, {
-          message: `Relabeled ${i + 1}/${videos.length}`,
+          message: `Relabeled ${index + 1}/${videos.length}`,
           indexed,
           needsReview,
           updatedAt: nowIso()
         });
       }
+      return processNext();
     }
+
+    await Promise.all(Array.from({ length: Math.min(parallel, videos.length) }, () => processNext()));
 
     const message = `Done: ${indexed} indexed, ${needsReview} review`;
     await store.updateJob(jobId, {

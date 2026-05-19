@@ -146,9 +146,9 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
     message: `Processing started in the background with ${parallel} workers. Watch the Jobs panel for live progress.`
   };
 }));
-app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId)));
+app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId, { parallel: req.body.parallel })));
 app.post("/api/relabel-folder-async", asyncRoute(async (req) => {
-  const { folderId } = req.body;
+  const { folderId, parallel } = req.body;
   if (!folderId) throw new Error("folderId is required.");
   const startedAt = nowIso();
   const jobId = stableId("job", `relabel:${folderId}:${startedAt}`);
@@ -159,10 +159,10 @@ app.post("/api/relabel-folder-async", asyncRoute(async (req) => {
     status: "running",
     startedAt,
     updatedAt: startedAt,
-    parallel: 1,
+    parallel: Number(parallel || 4),
     message: "Relabeling started"
   });
-  relabelFolder(config, store, folderId, { jobId }).catch((error) => {
+  relabelFolder(config, store, folderId, { jobId, parallel }).catch((error) => {
     console.error(`Background relabel failed for ${folderId}:`, error);
   });
   return {

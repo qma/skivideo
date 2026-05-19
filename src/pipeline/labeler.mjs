@@ -15,7 +15,12 @@ export async function labelVideoAthletesWithDebug(config, video, folder, store) 
     try {
       const geminiLabels = await labelWithGemini(config, video, folder, store);
       const labels = mergeLabels(heuristicLabelsOnly, geminiLabels);
-      debug.gemini = { mode: process.env.LLM_LABEL_MODE === "always" ? "always" : "fallback", labels: geminiLabels.length };
+      const usage = geminiLabels[0]?.usage;
+      debug.gemini = {
+        mode: process.env.LLM_LABEL_MODE === "always" ? "always" : "fallback",
+        labels: geminiLabels.length,
+        usage
+      };
       debug.finalLabels = labels.map(debugLabelSummary);
       return { labels, debug };
     } catch (error) {
@@ -240,11 +245,26 @@ async function labelWithGemini(config, video, folder, store) {
   const parsed = JSON.parse(text);
   const labels = Array.isArray(parsed) ? parsed : (parsed.labels || []);
 
+  const usage = json.usageMetadata || {};
+  const stats = {
+    promptTokens: usage.promptTokenCount || 0,
+    candidatesTokens: usage.candidatesTokenCount || 0,
+    totalTokens: usage.totalTokenCount || 0,
+    cachedPromptTokens: usage.cachedContentTokenCount || 0
+  };
+
+  // Estimate cost (Gemini 2.0 Flash pricing approx: $0.10/1M input, $0.40/1M output)
+  const inputCost = (stats.promptTokens - stats.cachedPromptTokens) * 0.0000001;
+  const cachedCost = stats.cachedPromptTokens * 0.000000025; // 25% of input cost for cached tokens
+  const outputCost = stats.candidatesTokens * 0.0000004;
+  stats.estimatedCost = Number((inputCost + cachedCost + outputCost).toFixed(6));
+
   return labels.map((label) => ({
     ...label,
     confidence: label.probability || 0,
     source: "gemini_llm_audio_roster_reasoning",
-    methodVersion: `gemini-${config.geminiLabelModel}-v1`
+    methodVersion: `gemini-${config.geminiLabelModel}-v1`,
+    usage: stats
   }));
 }
 

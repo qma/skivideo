@@ -119,6 +119,7 @@
       </div>
       <div class="modalBody">
         <p class="muted">Configure the system prompt used for Gemini LLM labeling. Supported macros: <code>{{roster}}</code>, <code>{{filename}}</code>, <code>{{transcript}}</code>, <code>{{venue}}</code>, <code>{{discipline}}</code>, <code>{{date}}</code>.</p>
+        <p class="muted small">Tip: Place stable macros like <code>{{roster}}</code> and event metadata at the <strong>top</strong> to optimize prompt caching.</p>
         <textarea id="labelPromptInput" class="settingsTextarea" rows="18"></textarea>
       </div>
       <div class="modalFooter">

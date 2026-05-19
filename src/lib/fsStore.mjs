@@ -14,6 +14,10 @@ const emptyStore = {
     labelPrompt: `Extract skier athlete names from a skiing video transcript. 
 Use the provided candidate roster as the canonical source for names and spellings. 
 The event venue is {{venue}}, discipline is {{discipline}}, and date is {{date}}.
+
+Candidate Roster:
+{{roster}}
+
 Focus on identifying athletes actually featured in the video or explicitly called out as "in the gate", "on course", etc.
 Allow for fuzzy/phonetic matches based on common transcription errors.
 
@@ -29,9 +33,7 @@ Return COMPACT JSON ONLY. No preamble.
 
 Input Data:
 Filename: {{filename}}
-Transcript: {{transcript}}
-Roster:
-{{roster}}`
+Transcript: {{transcript}}`
   }
 };
 
