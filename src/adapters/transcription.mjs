@@ -257,7 +257,7 @@ async function assertReadableModel(modelPath, requestedSize) {
 async function ensureWhisperCppAudio(config, audioPath) {
   if (/\.(wav|mp3|flac|ogg)$/i.test(audioPath)) return audioPath;
   const ffmpeg = await resolveFfmpeg(config);
-  const outPath = mirroredAudioPathForVideoPath(config, audioPath, ".wav");
+  const outPath = whisperCppAudioPath(config, audioPath);
   try {
     await fs.access(outPath);
     return outPath;
@@ -274,6 +274,20 @@ async function ensureWhisperCppAudio(config, audioPath) {
     outPath
   ]);
   return outPath;
+}
+
+function whisperCppAudioPath(config, audioPath) {
+  const audioRelative = path.relative(config.audioDir, audioPath || "");
+  if (audioRelative && !audioRelative.startsWith("..") && !path.isAbsolute(audioRelative)) {
+    return path.join(config.audioDir, replaceExtension(audioRelative, ".wav"));
+  }
+  return mirroredAudioPathForVideoPath(config, audioPath, ".wav");
+}
+
+function replaceExtension(filePath, extension) {
+  const parsed = path.parse(filePath || "audio");
+  const suffix = extension.startsWith(".") ? extension : `.${extension}`;
+  return path.join(parsed.dir, `${parsed.name}${suffix}`);
 }
 
 function whisperTimeToSeconds(value) {

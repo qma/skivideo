@@ -157,6 +157,9 @@
 - [codex] Audited local media metadata after the relative-path refactor: all 1,177 cached local video refs resolve through `data/...`, and media-link audit reports 1,203/1,203 OK with 0 broken links.
 - [codex] Added reusable relative-path handling for local cache metadata. Runtime media serving, transcription, cache writes, and CLI audits now resolve relative local paths from project/data roots.
 
+- [codex] Fixed FW Finals transcript repair path: Homebrew `ffmpeg` was broken after library updates (`libbluray.2.dylib` missing), reinstalled ffmpeg, reprocessed the five newly downloaded `Super G Race FW Finals` folders from local media, and verified 117/117 videos now have audio/transcripts with 0 failed and 0 synthetic `No Skier` labels.
+- [codex] Hardened labeling/transcription code: LLM null-answer labels such as `No Skier Identified` are filtered out, and whisper.cpp temporary WAV conversion now preserves the event subfolder under `data/audio/...`.
+
 ## In Progress
 - None.
 

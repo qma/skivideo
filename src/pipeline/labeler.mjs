@@ -258,12 +258,12 @@ async function labelWithGemini(config, video, folder, store) {
   const outputCost = stats.candidatesTokens * 0.0000004;
   stats.estimatedCost = Number((inputCost + cachedCost + outputCost).toFixed(6));
 
-  const labels = labelsRaw.map((label) => ({
+  const labels = sanitizeExternalLabels(labelsRaw.map((label) => ({
     ...label,
     confidence: label.probability || 0,
     source: "gemini_llm_audio_roster_reasoning",
     methodVersion: `gemini-${config.geminiLabelModel}-v1`
-  }));
+  })));
 
   return { labels, usage: stats };
 }
@@ -325,11 +325,11 @@ async function labelWithOpenAi(config, video, folder) {
   const json = await response.json();
   const text = json.output_text || json.output?.flatMap((item) => item.content || []).map((c) => c.text).join("") || "{}";
   const parsed = JSON.parse(text);
-  return (parsed.labels || []).map((label) => ({
+  return sanitizeExternalLabels((parsed.labels || []).map((label) => ({
     ...label,
     source: "llm_audio_roster_reasoning",
     methodVersion: "openai-json-v1"
-  }));
+  })));
 }
 
 function evidenceSnippet(text, name) {
@@ -363,12 +363,29 @@ function dedupeLabels(labels) {
 }
 
 function mergeLabels(...groups) {
-  const flattened = groups.flat();
+  const flattened = sanitizeExternalLabels(groups.flat());
   const llmLabels = flattened.filter((l) => l.source && (l.source.includes("gemini") || l.source.includes("openai")));
   if (llmLabels.length > 0) {
     return dedupeLabels(llmLabels).sort((a, b) => b.confidence - a.confidence);
   }
   return dedupeLabels(flattened).sort((a, b) => b.confidence - a.confidence);
+}
+
+function sanitizeExternalLabels(labels) {
+  return (labels || []).filter((label) => label && label.name && !isNullAthleteLabel(label));
+}
+
+function isNullAthleteLabel(label) {
+  const name = normalizeText(label.name || "");
+  const evidence = normalizeText(label.evidence || "");
+  const thought = normalizeText(label.thought || label.debug || "");
+  const haystack = [name, evidence, thought].filter(Boolean).join(" ");
+  if (!haystack) return true;
+  if (/^(no|none|unknown|unidentified|not identified|n\/a|na)$/.test(name)) return true;
+  if (/^no (skier|athlete|racer|name|match)/.test(name)) return true;
+  if (/^(skier|athlete|racer) (not )?(identified|found|detected|matched|unknown)$/.test(name)) return true;
+  return /\b(no|none|not any|could not|unable to) (skier|athlete|racer|name|names|match|matches)\b/.test(haystack)
+    || /\b(transcript|audio) (is )?(empty|blank|unavailable)\b/.test(haystack);
 }
 
 function scoreReason(candidate) {
