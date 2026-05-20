@@ -802,6 +802,7 @@ function jobHref(jobId) {
 }
 
 function jobClass(job) {
+  if (job.status === "queued") return "jobQueued";
   if (job.status === "running") return "jobRunning";
   if (job.status === "completed") return "jobCompleted";
   if (job.status === "completed_with_errors" || job.status === "failed") return "jobFailed";

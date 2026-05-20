@@ -10,7 +10,7 @@ export async function processFolder(config, store, folderId, options = {}) {
   const requestedParallel = Number(options.parallel || 1);
   const parallel = Number.isFinite(requestedParallel) ? Math.max(1, Math.min(16, Math.floor(requestedParallel))) : 1;
   const startedAt = nowIso();
-  const jobId = stableId("job", `${folderId}:${startedAt}`);
+  const jobId = options.jobId || stableId("job", `${folderId}:${startedAt}`);
   const jobType = options.reprocess ? "reprocess_folder" : "process_folder";
   const actionLabel = options.reprocess ? "Re-processing" : "Processing";
   await store.addJob({
@@ -267,9 +267,15 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
     }
   }
 
+  let audioTranscriptionError = null;
   if ((forceTranscribe || !next.transcript?.text) && next.localAudioPath) {
-    next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
-    transcribedThisRun = true;
+    try {
+      next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
+      transcribedThisRun = true;
+    } catch (error) {
+      audioTranscriptionError = error;
+      next.localAudioPath = "";
+    }
   }
 
   if (((forceTranscribe && !transcribedThisRun) || !next.transcript?.text) && next.localVideoPath) {
@@ -278,7 +284,7 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
       next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
       transcribedThisRun = true;
     } catch (error) {
-      errors.push(`Media transcription failed: ${error.message}`);
+      errors.push(`Media transcription failed: ${error.message}${audioTranscriptionError ? `; previous audio path failed: ${audioTranscriptionError.message}` : ""}`);
     }
   }
 

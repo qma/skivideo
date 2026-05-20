@@ -16,12 +16,46 @@ import { confirmLiveTimingSelection, ensureFolderManifest, ensureLiveTimingCorre
 import { detectTranscriptionBackends } from "./adapters/transcription.mjs";
 import { normalizeText } from "./lib/text.mjs";
 
+class AsyncJobQueue {
+  constructor(concurrency = 1) {
+    this.concurrency = Math.max(1, Math.floor(Number(concurrency) || 1));
+    this.active = 0;
+    this.pending = [];
+  }
+
+  enqueue(task) {
+    this.pending.push(task);
+    this.drain();
+  }
+
+  stats() {
+    return { active: this.active, pending: this.pending.length, concurrency: this.concurrency };
+  }
+
+  drain() {
+    while (this.active < this.concurrency && this.pending.length) {
+      const task = this.pending.shift();
+      this.active += 1;
+      Promise.resolve()
+        .then(task)
+        .catch((error) => {
+          console.error("Queued process job failed:", error);
+        })
+        .finally(() => {
+          this.active -= 1;
+          this.drain();
+        });
+    }
+  }
+}
+
 const config = loadConfig();
 const store = new JsonStore(config);
 await store.ensure();
 await store.failRunningJobs();
 
 const app = express();
+const processJobQueue = new AsyncJobQueue(config.processJobConcurrency);
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -130,21 +164,54 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
   const folderId = req.body.folderId;
   if (!folderId) throw new Error("folderId is required.");
   const parallel = normalizeParallel(req.body.parallel, 4);
-  processFolder(config, store, folderId, {
+  const reprocess = Boolean(req.body.reprocess);
+  const queuedAt = nowIso();
+  const jobId = stableId("job", `${reprocess ? "reprocess" : "process"}:${folderId}:${queuedAt}`);
+  const options = {
+    jobId,
     parallel,
     forceTranscribe: Boolean(req.body.forceTranscribe),
     transcriptionPrompt: req.body.transcriptionPrompt,
     noDownload: Boolean(req.body.noDownload),
-    reprocess: Boolean(req.body.reprocess),
+    reprocess,
     whisperCppNoGpu: booleanOrUndefined(req.body.whisperCppNoGpu)
-  }).catch((error) => {
-    console.error(`Background processing failed for ${folderId}:`, error);
+  };
+  const queueStats = processJobQueue.stats();
+  const jobsAhead = queueStats.active + queueStats.pending;
+  await store.addJob({
+    id: jobId,
+    type: reprocess ? "reprocess_folder" : "process_folder",
+    folderId,
+    status: "queued",
+    startedAt: queuedAt,
+    updatedAt: queuedAt,
+    parallel,
+    message: jobsAhead
+      ? `Queued behind ${jobsAhead} process job${jobsAhead === 1 ? "" : "s"}`
+      : "Queued for processing"
+  });
+  processJobQueue.enqueue(async () => {
+    try {
+      await processFolder(config, store, folderId, options);
+    } catch (error) {
+      console.error(`Background processing failed for ${folderId}:`, error);
+      await store.updateJob(jobId, {
+        status: "failed",
+        message: "Processing failed",
+        details: error.message,
+        completedAt: nowIso(),
+        parallel
+      });
+    }
   });
   return {
     ok: true,
+    jobId,
     folderId,
     parallel,
-    message: `Processing started in the background with ${parallel} workers. Watch the Jobs panel for live progress.`
+    processJobConcurrency: processJobQueue.concurrency,
+    queue: processJobQueue.stats(),
+    message: `Processing queued with ${parallel} workers. Up to ${processJobQueue.concurrency} process job${processJobQueue.concurrency === 1 ? "" : "s"} run at once.`
   };
 }));
 app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId, { parallel: req.body.parallel })));

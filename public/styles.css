@@ -379,6 +379,12 @@ select {
   align-items: center;
 }
 
+.jobQueued {
+  border-color: #d8cfa8;
+  border-left-color: #9a7a16;
+  background: #fffbea;
+}
+
 .jobRunning {
   border-color: #74b7d5;
   border-left-color: #157ba7;
@@ -406,6 +412,10 @@ select {
   flex: 0 0 8px;
   border-radius: 999px;
   background: var(--muted);
+}
+
+.jobQueued .jobStatusDot {
+  background: #9a7a16;
 }
 
 .jobRunning .jobStatusDot {

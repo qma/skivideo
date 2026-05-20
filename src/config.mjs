@@ -39,6 +39,7 @@ export function loadConfig() {
     // Whisper backend: whisper.cpp, mlx, openai.
     whisperBackend: process.env.WHISPER_BACKEND || "whisper.cpp",
     whisperCppNoGpu: /^(1|true|yes)$/i.test(process.env.WHISPER_CPP_NO_GPU || ""),
+    processJobConcurrency: positiveInteger(process.env.PROCESS_JOB_CONCURRENCY, 1),
     metadataBackend: process.env.METADATA_BACKEND || "local",
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
     firebaseDatabaseId: process.env.FIREBASE_DATABASE_ID || "(default)",
@@ -69,8 +70,14 @@ export function publicConfig(config = loadConfig()) {
     hasOpenAiKey: Boolean(config.openaiApiKey),
     metadataBackend: config.metadataBackend,
     whisperCppNoGpu: config.whisperCppNoGpu,
+    processJobConcurrency: config.processJobConcurrency,
     hasFirebaseConfig: Boolean(config.firebaseProjectId && (config.firebaseServiceAccountJson || config.firebaseServiceAccountPath)),
     sharepointRootUrl: config.sharepointRootUrl,
     dataDir: config.dataDir
   };
+}
+
+function positiveInteger(value, fallback) {
+  const number = Number(value || fallback);
+  return Number.isFinite(number) ? Math.max(1, Math.floor(number)) : fallback;
 }

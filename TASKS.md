@@ -159,6 +159,9 @@
 
 - [codex] Fixed FW Finals transcript repair path: Homebrew `ffmpeg` was broken after library updates (`libbluray.2.dylib` missing), reinstalled ffmpeg, reprocessed the five newly downloaded `Super G Race FW Finals` folders from local media, and verified 117/117 videos now have audio/transcripts with 0 failed and 0 synthetic `No Skier` labels.
 - [codex] Hardened labeling/transcription code: LLM null-answer labels such as `No Skier Identified` are filtered out, and whisper.cpp temporary WAV conversion now preserves the event subfolder under `data/audio/...`.
+- [codex] Added an in-process queue for browser-triggered Process/Re-Process jobs. Default process-job concurrency is now 1, configurable with `PROCESS_JOB_CONCURRENCY`, while each queued job still honors its own worker parallelism such as `parallel: 4`.
+- [codex] Validated the queue through the admin API by submitting two local-only reprocess jobs for `GS Camp April 24` and `GS Camp April 25`: the first ran, the second stayed queued, then started only after the first completed. Both finished with 0 failed videos.
+- [codex] Added queued-job UI coloring and startup cleanup for queued jobs. Also hardened processing against stale cached audio paths by falling back to re-extracting audio from local video when the existing audio artifact is invalid.
 
 ## In Progress
 - None.
@@ -168,6 +171,6 @@
 - Team A: review and polish the static public app UX after a family-facing smoke test.
 - Team B: formalize Firestore schema and sync migrations.
 - Team C: implement simple admin password gate.
-- Team D: extract worker/job queue.
+- Team D: extract the current in-process job queue to a durable worker/queue if/when admin processing is hosted outside the local Mac runtime.
 - Team E: refactor SharePoint behind source adapter interface.
 - Team F: wire CI/CD or hosted deploy credentials around the Vercel static build (`npm run public:build`).
