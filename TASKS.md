@@ -162,9 +162,10 @@
 - [codex] Added an in-process queue for browser-triggered Process/Re-Process jobs. Default process-job concurrency is now 1, configurable with `PROCESS_JOB_CONCURRENCY`, while each queued job still honors its own worker parallelism such as `parallel: 4`.
 - [codex] Validated the queue through the admin API by submitting two local-only reprocess jobs for `GS Camp April 24` and `GS Camp April 25`: the first ran, the second stayed queued, then started only after the first completed. Both finished with 0 failed videos.
 - [codex] Added queued-job UI coloring and startup cleanup for queued jobs. Also hardened processing against stale cached audio paths by falling back to re-extracting audio from local video when the existing audio artifact is invalid.
+- [codex] Enqueued 13 high-confidence incomplete race folders through the web process endpoint with `parallel: 4` and default `PROCESS_JOB_CONCURRENCY=1`. Verified the first job completed, the second started only afterward, and remaining race jobs stayed queued; Jan 10 Top local/transcript counts increased from 75 to 92 while running, confirming real download/process work.
 
 ## In Progress
-- None.
+- [codex] High-confidence race batch is running in the local web queue. Current batch job ids: `job_b7c69bb2cc3e1c37`, `job_2d75c1fcf8a58600`, `job_67b1463572709675`, `job_1c96f6d7bf9fff20`, `job_d192be7fd29a3742`, `job_18d169085bab2b32`, `job_c4e3d89b3cfdc9aa`, `job_d58aec8eb1826879`, `job_ce6fba79e12dc799`, `job_069fc08ebfbf9b9a`, `job_2479fde956425021`, `job_420051751d62444f`, `job_c26e7820abe71680`. Do not restart the server unless intentionally interrupting/resuming these queued in-process jobs.
 
 ## Next
 
