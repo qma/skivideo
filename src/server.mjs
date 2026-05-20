@@ -4,6 +4,7 @@ import path from "node:path";
 import express from "express";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { JsonStore } from "./lib/fsStore.mjs";
+import { resolveLocalPath } from "./lib/localPaths.mjs";
 import { nowIso, stableId } from "./lib/ids.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { listRootEventFolders, buildFolderManifest } from "./adapters/graph.mjs";
@@ -325,7 +326,7 @@ async function search(query) {
       return {
         ...video,
         folder,
-        localVideoPlayable: Boolean(video.localVideoPath && await readableLocalMedia(video.localVideoPath))
+        localVideoPlayable: Boolean(video.localVideoPath && await readableLocalMedia(resolveLocalPath(config, video.localVideoPath)))
       };
     }));
   return { query, results };
@@ -346,7 +347,7 @@ async function summary() {
   }]));
   const videoStats = await Promise.all(state.videos.map(async (video) => {
     const labelCount = (video.athleteLabels?.length || 0) + (video.goldenLabel ? 1 : 0);
-    const isReadable = video.localVideoPath ? await readableLocalMedia(video.localVideoPath) : null;
+    const isReadable = video.localVideoPath ? await readableLocalMedia(resolveLocalPath(config, video.localVideoPath)) : null;
     return {
       folderId: video.folderId,
       labelCount,
@@ -473,7 +474,7 @@ async function eventDetail(folderId) {
       .filter((video) => video.folderId === folderId)
       .map(async (video) => ({
           ...video,
-          localVideoPlayable: Boolean(video.localVideoPath && await readableLocalMedia(video.localVideoPath)),
+          localVideoPlayable: Boolean(video.localVideoPath && await readableLocalMedia(resolveLocalPath(config, video.localVideoPath))),
           transcript: video.transcript ? {
             source: video.transcript.source,
             text: String(video.transcript.text || "").slice(0, 500),
@@ -534,7 +535,8 @@ async function serveMedia(req, res, videoId) {
   const state = await store.read();
   const video = state.videos.find((item) => item.id === videoId);
   if (!video) return res.status(404).json({ error: "Video not found" });
-  const localMedia = video.localVideoPath ? await readableLocalMedia(video.localVideoPath) : null;
+  const localPath = video.localVideoPath ? resolveLocalPath(config, video.localVideoPath) : "";
+  const localMedia = localPath ? await readableLocalMedia(localPath) : null;
   if (!localMedia) {
     // Redirect to SharePoint original source to avoid server bandwidth bloat from proxying.
     // This may prompt for login in the browser if the user does not have a session.
@@ -548,7 +550,7 @@ async function serveMedia(req, res, videoId) {
       "accept-ranges": "bytes"
     });
     if (req.method === "HEAD") return res.end();
-    return pipeMediaStream(fsSync.createReadStream(video.localVideoPath), res);
+    return pipeMediaStream(fsSync.createReadStream(localPath), res);
   }
   const match = range.match(/bytes=(\d+)-(\d*)/);
   const start = match ? Number(match[1]) : 0;
@@ -560,7 +562,7 @@ async function serveMedia(req, res, videoId) {
     "content-type": video.mimeType || "video/mp4"
   });
   if (req.method === "HEAD") return res.end();
-  return pipeMediaStream(fsSync.createReadStream(video.localVideoPath, { start, end }), res);
+  return pipeMediaStream(fsSync.createReadStream(localPath, { start, end }), res);
 }
 
 async function readableLocalMedia(localPath) {

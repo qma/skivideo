@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { mirroredAudioPathForVideoPath, mirroredVideoPath, transcriptCachePath } from "../lib/cachePaths.mjs";
+import { resolveLocalPath, toStoredPath } from "../lib/localPaths.mjs";
 import { establishSharePointSession } from "./sharepointRest.mjs";
 
 export async function downloadToCache(url, targetPath, options = {}) {
@@ -23,7 +24,9 @@ export async function downloadToCache(url, targetPath, options = {}) {
     if (!response.body) throw new Error(`Download failed: empty response body for ${url}`);
     await pipeline(Readable.fromWeb(response.body), fsSync.createWriteStream(tempPath, { flags: "wx" }));
     await validateDownloadedFile(tempPath, response, url);
+    await fs.rm(targetPath, { force: true });
     await fs.rename(tempPath, targetPath);
+    await validateDownloadedFile(targetPath, response, url);
     return { path: targetPath, skipped: false };
   } catch (error) {
     await fs.rm(tempPath, { force: true });
@@ -42,29 +45,30 @@ export async function cacheTranscript(video, config, rootUrl = config.sharepoint
   return {
     ...source,
     text: stripTranscriptMarkup(text),
-    localPath: downloaded.path
+    localPath: toStoredPath(config, downloaded.path)
   };
 }
 
 export async function mirrorVideo(video, folder, config, rootUrl = config.sharepointRootUrl) {
-  if (video.localVideoPath && await usableCachedFile(video.localVideoPath)) return video.localVideoPath;
+  if (video.localVideoPath && await usableCachedFile(resolveLocalPath(config, video.localVideoPath))) return video.localVideoPath;
   if (!video.downloadUrl) throw new Error(`No download URL for ${video.filename}`);
   const target = mirroredVideoPath(config, video, folder);
   const downloaded = await downloadToCache(video.downloadUrl, target, await sharePointDownloadOptions(rootUrl, video.downloadUrl));
-  return downloaded.path;
+  return toStoredPath(config, downloaded.path);
 }
 
 export async function extractAudio(videoPath, config) {
-  const outPath = mirroredAudioPathForVideoPath(config, videoPath, ".m4a");
+  const resolvedVideoPath = resolveLocalPath(config, videoPath);
+  const outPath = mirroredAudioPathForVideoPath(config, resolvedVideoPath, ".m4a");
   if (await usableCachedFile(outPath)) {
-    return outPath;
+    return toStoredPath(config, outPath);
   }
   await fs.mkdir(path.dirname(outPath), { recursive: true });
   const ffmpeg = await resolveFfmpeg(config);
   await run(ffmpeg, [
     "-y",
     "-i",
-    videoPath,
+    resolvedVideoPath,
     "-vn",
     "-ac",
     "1",
@@ -74,7 +78,7 @@ export async function extractAudio(videoPath, config) {
     "aac",
     outPath
   ]);
-  return outPath;
+  return toStoredPath(config, outPath);
 }
 
 export async function resolveFfmpeg(config) {

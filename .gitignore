@@ -2,6 +2,8 @@ node_modules/
 .venv/
 .env
 .DS_Store
+data/
+media
 data/media/
 data/audio/
 data/transcripts/

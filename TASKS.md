@@ -2,10 +2,17 @@
 
 ## Current Focus
 
-- Continue post-publish hardening for the Phase 1 public app.
+- Batch download/process championship race events around Apr 3-5 via CLI so the job is independent of web server restarts.
 
 ## Completed
 
+- [codex] Scoped the requested "championship series" batch to Apr 3-5 championship folders: `Super G U14 Championships, April 3`, `GS Championships, April 4`, `GS Champs more videos, April 4`, `SL Champs, April 5`, and `SL Champs, Camera 2. April 5`.
+- [codex] Processed `Super G U14 Championships, April 3` via CLI with local downloads/transcripts complete: 62/62 playable local videos, 62 transcripts, 45 indexed, 17 review, 0 failed. Parallel 4 caused macOS memory pressure while another agent was transcribing, so the successful completion used `--parallel 1`.
+- [codex] Confirmed `GS Championships, April 4` Live-Timing races as `308981` Men and `308980` Women (`FW U 14 CHAMPIONSHIPS GS`, Mammoth), then processed downloads/transcripts via CLI: 69/69 playable local videos, 68 transcripts, 52 indexed, 17 review, 0 failed.
+- [codex] Confirmed `GS Champs more videos, April 4` as the same Live-Timing races `308981` Men and `308980` Women, then processed downloads/transcripts via CLI. User requested switching from `--parallel 1` to `--parallel 4`; final state is 60/60 playable local videos, 60 transcripts, 50 indexed, 10 review, 0 failed.
+- [codex] Fixed download/cache behavior for offline travel use: `process-folder` now mirrors video whenever downloads are allowed even if transcript metadata already exists, and `downloadToCache` removes invalid existing targets before rename and validates the final target after rename.
+- [codex] Repaired and processed `SL Champs, April 5` via CLI with `--parallel 4`: 66/66 playable local videos, 66 transcripts, 39 indexed, 27 review, 0 failed.
+- [codex] Processed `SL Champs, Camera 2. April 5` via CLI with `--parallel 4`: 63 transcripts, 36 indexed, 27 review, 0 failed.
 - Design doc and implementation plan created.
 - Local Node web app and CLI scaffolded.
 - Express added as the backend framework for API routes, static hosting, JSON parsing, 404s, error handling, and media range streaming.
@@ -146,6 +153,9 @@
 - [codex] Added a `Relabel` event action in the admin UI. It calls `/api/relabel-folder` and reruns only athlete scoring/labeling from existing transcripts, rosters, and filenames; it does not fetch Live-Timing, download media, extract audio, or transcribe.
 - [codex] Added reviewed golden labels. Event review inputs now autocomplete from the event roster, Save writes `goldenLabel` without overwriting predicted `athleteLabels`, and admin/public display/search paths prefer the golden label as the final answer.
 - [codex] Enabled backend dev hot restart through `npm run dev` using Node watch mode.
+
+- [codex] Audited local media metadata after the relative-path refactor: all 1,177 cached local video refs resolve through `data/...`, and media-link audit reports 1,203/1,203 OK with 0 broken links.
+- [codex] Added reusable relative-path handling for local cache metadata. Runtime media serving, transcription, cache writes, and CLI audits now resolve relative local paths from project/data roots.
 
 ## In Progress
 - None.

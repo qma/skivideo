@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { nowIso } from "./ids.mjs";
+import { normalizeStoredLocalPaths } from "./localPaths.mjs";
 
 const emptyStore = {
   version: 1,
@@ -70,7 +71,7 @@ export class JsonStore {
   }
 
   async write(store) {
-    const next = { ...emptyStore, ...store, updatedAt: nowIso() };
+    const next = normalizeStoredLocalPaths(this.config, { ...emptyStore, ...store, updatedAt: nowIso() });
     const write = this.writeQueue.then(() => writeJsonAtomic(this.storePath, next));
     this.writeQueue = write.catch(() => {});
     await write;

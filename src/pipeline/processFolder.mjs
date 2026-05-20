@@ -259,6 +259,14 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
     }
   }
 
+  if (allowDownload && next.downloadUrl) {
+    try {
+      next.localVideoPath = await mirrorVideo(next, folder, config, rootUrl);
+    } catch (error) {
+      errors.push(`Media download failed: ${error.message}`);
+    }
+  }
+
   if ((forceTranscribe || !next.transcript?.text) && next.localAudioPath) {
     next.transcript = await transcribeAudio(config, next.localAudioPath, transcriptionOptions);
     transcribedThisRun = true;

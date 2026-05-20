@@ -2,6 +2,7 @@
 import fs from "node:fs/promises";
 import { loadConfig, publicConfig } from "./config.mjs";
 import { auditPublicLeanStore, JsonStore } from "./lib/fsStore.mjs";
+import { resolveLocalPath } from "./lib/localPaths.mjs";
 import { syncMetadataBackend } from "./lib/metadataBackend.mjs";
 import { buildFolderManifest, listRootEventFolders } from "./adapters/graph.mjs";
 import { buildRestFolderManifest, listRootEventFoldersRest, pickOldestFolder } from "./adapters/sharepointRest.mjs";
@@ -298,7 +299,7 @@ async function auditMediaLinks(args) {
     ? state.videos
     : state.videos.filter((video) => ["indexed", "needs_review", "failed"].includes(video.processing?.status));
   const rows = await Promise.all(videos.map(async (video) => {
-    const local = await localMediaStatus(video.localVideoPath);
+    const local = await localMediaStatus(video.localVideoPath ? resolveLocalPath(config, video.localVideoPath) : "");
     const sourceFallback = Boolean(video.sharepointUrl);
     const ok = local.readable || sourceFallback;
     return {

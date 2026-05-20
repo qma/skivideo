@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { mirroredAudioPathForVideoPath, transcriptOutputPathForAudio } from "../lib/cachePaths.mjs";
+import { resolveLocalPath, toStoredPath } from "../lib/localPaths.mjs";
 import { resolveFfmpeg } from "./media.mjs";
 
 export async function detectTranscriptionBackends(config) {
@@ -41,13 +42,14 @@ export async function detectTranscriptionBackends(config) {
 }
 
 export async function transcribeAudio(config, audioPath, options = {}) {
+  const resolvedAudioPath = resolveLocalPath(config, audioPath);
   const backends = await detectTranscriptionBackends(config);
   if ((config.whisperBackend || "whisper.cpp") === "whisper.cpp" && backends.whisperCppError) {
     throw new Error(backends.whisperCppError);
   }
-  if (backends.mlxWhisper) return transcribeWithMlxWhisper(config, audioPath, options);
-  if (backends.whisperCpp) return transcribeWithWhisperCpp(config, audioPath, options);
-  if (backends.openai) return transcribeWithOpenAi(config, audioPath, options);
+  if (backends.mlxWhisper) return transcribeWithMlxWhisper(config, resolvedAudioPath, options);
+  if (backends.whisperCpp) return transcribeWithWhisperCpp(config, resolvedAudioPath, options);
+  if (backends.openai) return transcribeWithOpenAi(config, resolvedAudioPath, options);
   throw new Error("No transcription backend is available. Run scripts/install-whisper.sh or install whisper.cpp with a ggml model.");
 }
 
@@ -81,7 +83,7 @@ export async function transcribeWithMlxWhisper(config, audioPath, options = {}) 
     source: "local_mlx_whisper",
     text: raw.text || "",
     segments: raw.segments || [],
-    localPath: outPath,
+    localPath: toStoredPath(config, outPath),
     model,
     prompt: promptMetadata(options)
   };
@@ -164,8 +166,8 @@ export async function transcribeWithWhisperCpp(config, audioPath, options = {}) 
       source: "local_whisper_cpp",
       text: segments.map((segment) => segment.text).join(" ").replace(/\s+/g, " ").trim(),
       segments,
-      localPath: outPath,
-      model,
+      localPath: toStoredPath(config, outPath),
+      model: toStoredPath(config, model),
       acceleration: {
         backend: "whisper.cpp",
         gpu: !noGpu
