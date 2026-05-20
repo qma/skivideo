@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.mjs",
-    "dev": "node scripts/dev-server.mjs",
+    "dev": "node --watch --watch-path=src src/server.mjs",
     "cli": "node src/cli.mjs",
     "smoke": "node src/smoke.mjs",
     "public:export": "node src/cli.mjs export-public && node scripts/prepare-public-next.mjs",
