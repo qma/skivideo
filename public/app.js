@@ -19,7 +19,7 @@ const actionTips = {
   prepare: "Run View and Live dependencies if needed, then relabel from existing metadata/transcripts. Does not download media.",
   relabel: "Rerun only athlete scoring and labeling from existing transcripts, rosters, and filenames. Does not fetch Live-Timing, download media, or transcribe audio.",
   process: "Run View, Live, and Prepare dependencies if needed, then download/mirror videos, transcribe, label, and update the index with parallel 4.",
-  reprocess: "Force retranscription and relabeling from existing local media/audio only. Does not download missing media.",
+  reprocess: "Force retranscription and relabeling from existing local media/audio only. Does not download missing media; use Process when local media is missing.",
   reset: "Clear videos, labels, transcripts, Live-Timing correlation, jobs, and derived metadata for this event. Keeps the discovered source folder and does not delete local media files on disk."
 };
 
@@ -558,7 +558,7 @@ async function startProcessing(folderId) {
 }
 
 async function startReprocessing(folderId) {
-  const confirmed = window.confirm("Re-process this event from local media only? This retranscribes and relabels existing local audio/video, but skips videos that are not already cached.");
+  const confirmed = window.confirm("Re-process this event from local media only? This retranscribes and relabels existing local audio/video, but skips videos that are not already cached. If this event has 0 local media/transcripts, use Process instead.");
   if (!confirmed) return;
   const result = await action("/api/process-folder-async", {
     folderId,
