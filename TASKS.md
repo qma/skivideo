@@ -164,9 +164,10 @@
 - [codex] Added queued-job UI coloring and startup cleanup for queued jobs. Also hardened processing against stale cached audio paths by falling back to re-extracting audio from local video when the existing audio artifact is invalid.
 - [codex] Enqueued 13 high-confidence incomplete race folders through the web process endpoint with `parallel: 4` and default `PROCESS_JOB_CONCURRENCY=1`. Verified the first job completed, the second started only afterward, and remaining race jobs stayed queued; Jan 10 Top local/transcript counts increased from 75 to 99 and completed with 0 failed videos, confirming real download/process work.
 - [codex] Queue validation also covered dependency blockers: `Super G Race 1 China Peak Feb 6` and `Super G Race 2 China Peak Feb 7` stopped at the Live-Timing admin-confirmation gate, and the queue continued automatically to `SL Race DP Feb 27th Bottom` instead of stalling.
+- [codex] Fixed Live-Timing confirmation relabel behavior: confirm/no-live now queues relabel jobs through the same configurable background queue, duplicate relabel clicks for the same folder return the existing queued/running job, and the admin buttons disable/change text while confirmation is being submitted. Validated with two queued relabel jobs plus a duplicate request: one ran, one queued, duplicate reused the queued job.
 
 ## In Progress
-- [codex] High-confidence race batch is running in the local web queue. Completed: Jan 9 Northstar Day 1, Jan 10 Northstar Top Day 2. Blocked for Live-Timing admin confirmation: Super G Race 1 China Peak Feb 6, Super G Race 2 China Peak Feb 7. Currently running: SL Race DP Feb 27th Bottom. Remaining Diamond Peak SL Race jobs are queued. Do not restart the server unless intentionally interrupting/resuming these queued in-process jobs.
+- None.
 
 ## Next
 

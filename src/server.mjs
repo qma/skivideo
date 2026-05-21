@@ -107,12 +107,13 @@ app.post("/api/correlate-folder-live-timing", asyncRoute(async (req) => {
   };
 }));
 app.post("/api/confirm-live-timing", asyncRoute(async (req) => {
-  const confirmation = await confirmLiveTimingSelection(config, store, req.body.folderId, req.body.raceIds || []);
-  const relabel = await relabelFolder(config, store, req.body.folderId);
+  const folderId = req.body.folderId;
+  const confirmation = await confirmLiveTimingSelection(config, store, folderId, req.body.raceIds || []);
+  const relabel = await queueRelabelFolder(folderId, { parallel: req.body.parallel });
   return {
     ...confirmation,
     relabel,
-    message: `${confirmation.message}; recalculated ${relabel.indexed} indexed and ${relabel.needsReview} review label status${relabel.videos === 1 ? "" : "es"}`
+    message: `${confirmation.message}; ${relabel.message}`
   };
 }));
 app.post("/api/list-sharepoint", asyncRoute(async () => {
@@ -216,29 +217,80 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
 }));
 app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store, req.body.folderId, { parallel: req.body.parallel })));
 app.post("/api/relabel-folder-async", asyncRoute(async (req) => {
-  const { folderId, parallel } = req.body;
+  return queueRelabelFolder(req.body.folderId, { parallel: req.body.parallel });
+}));
+async function queueRelabelFolder(folderId, options = {}) {
   if (!folderId) throw new Error("folderId is required.");
-  const startedAt = nowIso();
-  const jobId = stableId("job", `relabel:${folderId}:${startedAt}`);
+  const existing = await activeFolderJob(folderId, "relabel_folder");
+  if (existing) {
+    return {
+      ok: true,
+      duplicate: true,
+      jobId: existing.id,
+      folderId,
+      status: existing.status,
+      queue: processJobQueue.stats(),
+      message: `Relabeling is already ${existing.status} for this event. Watch the existing job in the Jobs panel.`
+    };
+  }
+
+  const parallel = normalizeParallel(options.parallel, 4);
+  const queuedAt = nowIso();
+  const jobId = stableId("job", `relabel:${folderId}:${queuedAt}`);
+  const queueStats = processJobQueue.stats();
+  const jobsAhead = queueStats.active + queueStats.pending;
   await store.addJob({
     id: jobId,
     type: "relabel_folder",
     folderId,
-    status: "running",
-    startedAt,
-    updatedAt: startedAt,
-    parallel: Number(parallel || 4),
-    message: "Relabeling started"
+    status: "queued",
+    startedAt: queuedAt,
+    updatedAt: queuedAt,
+    parallel,
+    message: jobsAhead
+      ? `Queued behind ${jobsAhead} background job${jobsAhead === 1 ? "" : "s"}`
+      : "Queued for relabeling"
   });
-  relabelFolder(config, store, folderId, { jobId, parallel }).catch((error) => {
-    console.error(`Background relabel failed for ${folderId}:`, error);
+
+  processJobQueue.enqueue(async () => {
+    try {
+      await store.updateJob(jobId, {
+        status: "running",
+        message: `Relabeling started with ${parallel} workers`,
+        updatedAt: nowIso(),
+        parallel
+      });
+      await relabelFolder(config, store, folderId, { jobId, parallel });
+    } catch (error) {
+      console.error(`Background relabel failed for ${folderId}:`, error);
+      await store.updateJob(jobId, {
+        status: "failed",
+        message: "Relabeling failed",
+        details: error.message,
+        completedAt: nowIso(),
+        parallel
+      });
+    }
   });
+
   return {
     ok: true,
     jobId,
-    message: "Relabeling started in the background. Watch the Jobs panel for live progress."
+    folderId,
+    parallel,
+    processJobConcurrency: processJobQueue.concurrency,
+    queue: processJobQueue.stats(),
+    message: `Relabeling queued with ${parallel} workers. Up to ${processJobQueue.concurrency} background job${processJobQueue.concurrency === 1 ? "" : "s"} run at once.`
   };
-}));
+}
+
+async function activeFolderJob(folderId, type) {
+  const state = await store.read();
+  return (state.jobs || [])
+    .filter((job) => job.folderId === folderId && job.type === type && ["queued", "running"].includes(job.status))
+    .sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")))[0] || null;
+}
+
 app.post("/api/delete-folder", asyncRoute(async (req) => {
   console.log("Delete folder requested:", req.body.folderId);
   if (!req.body.folderId) throw new Error("folderId is required.");

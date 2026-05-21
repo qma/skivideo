@@ -9,7 +9,8 @@ const state = {
   eventConfidence: "",
   jobPollTimer: null,
   selectedJobId: "",
-  jobLogTimer: null
+  jobLogTimer: null,
+  liveTimingConfirmationPending: false
 };
 
 const actionTips = {
@@ -316,8 +317,8 @@ function renderLiveTimingSelection(folder) {
       `).join("")}
     </div>
     <div class="actions">
-      <button class="actionLink" type="button" data-confirm-live-timing>Confirm Selection</button>
-      <button class="actionLink subtleActionLink" type="button" data-confirm-no-live-timing>Confirm No Live-Timing</button>
+      <button class="actionLink" type="button" data-confirm-live-timing ${state.liveTimingConfirmationPending ? "disabled" : ""}>${state.liveTimingConfirmationPending ? "Relabeling queued..." : "Confirm Selection"}</button>
+      <button class="actionLink subtleActionLink" type="button" data-confirm-no-live-timing ${state.liveTimingConfirmationPending ? "disabled" : ""}>${state.liveTimingConfirmationPending ? "Please wait..." : "Confirm No Live-Timing"}</button>
     </div>
   `;
 }
@@ -505,7 +506,7 @@ async function bulkAction(actionName) {
 }
 
 async function confirmLiveTimingMatches() {
-  if (!state.selectedFolderId) return;
+  if (!state.selectedFolderId || state.liveTimingConfirmationPending) return;
   const checked = [...document.querySelectorAll("[data-live-timing-race]:checked")];
   const raceIds = checked.map((input) => input.value);
   if (!raceIds.length) {
@@ -516,21 +517,39 @@ async function confirmLiveTimingMatches() {
     showLog({ error: "Select at most two races: one Men and one Women." });
     return;
   }
-  const result = await action("/api/confirm-live-timing", { folderId: state.selectedFolderId, raceIds }, { silent: true });
-  if (!result?.ok) return;
-  showLog(result);
-  state.eventDetail = await api(`/api/event?folderId=${encodeURIComponent(state.selectedFolderId)}`);
-  renderEventView();
+  await confirmLiveTiming({ raceIds });
 }
 
 async function confirmNoLiveTiming() {
-  if (!state.selectedFolderId) return;
+  if (!state.selectedFolderId || state.liveTimingConfirmationPending) return;
   if (!confirm("Are you sure this event has no Live-Timing match? This will continue using only filenames and transcripts for athlete labeling.")) return;
-  const result = await action("/api/confirm-live-timing", { folderId: state.selectedFolderId, raceIds: [] }, { silent: true });
-  if (!result?.ok) return;
-  showLog(result);
-  state.eventDetail = await api(`/api/event?folderId=${encodeURIComponent(state.selectedFolderId)}`);
-  renderEventView();
+  await confirmLiveTiming({ raceIds: [] });
+}
+
+async function confirmLiveTiming({ raceIds }) {
+  state.liveTimingConfirmationPending = true;
+  setLiveTimingConfirmationButtonsBusy(true);
+  try {
+    const result = await action("/api/confirm-live-timing", { folderId: state.selectedFolderId, raceIds, parallel: 4 }, { silent: true });
+    if (!result?.ok) return;
+    showLog(result);
+    scheduleJobPolling(true);
+    state.eventDetail = await api(`/api/event?folderId=${encodeURIComponent(state.selectedFolderId)}`);
+    renderEventView();
+  } finally {
+    state.liveTimingConfirmationPending = false;
+    setLiveTimingConfirmationButtonsBusy(false);
+  }
+}
+
+function setLiveTimingConfirmationButtonsBusy(isBusy) {
+  for (const button of document.querySelectorAll("[data-confirm-live-timing], [data-confirm-no-live-timing]")) {
+    button.disabled = isBusy;
+  }
+  const confirmButton = document.querySelector("[data-confirm-live-timing]");
+  const noLiveButton = document.querySelector("[data-confirm-no-live-timing]");
+  if (confirmButton) confirmButton.textContent = isBusy ? "Relabeling queued..." : "Confirm Selection";
+  if (noLiveButton) noLiveButton.textContent = isBusy ? "Please wait..." : "Confirm No Live-Timing";
 }
 
 async function startProcessing(folderId) {
@@ -627,8 +646,8 @@ async function ensureViewManifest(folderId) {
 
 function scheduleJobPolling(force = false) {
   if (state.jobPollTimer) clearTimeout(state.jobPollTimer);
-  const hasRunningJob = state.summary?.jobs?.some((job) => job.status === "running");
-  if (!force && !hasRunningJob) return;
+  const hasActiveJob = state.summary?.jobs?.some((job) => ["queued", "running"].includes(job.status));
+  if (!force && !hasActiveJob) return;
   state.jobPollTimer = setTimeout(async () => {
     try {
       await refresh();
@@ -644,7 +663,7 @@ async function showJobLog(jobId) {
     const detail = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
     renderJobLog(detail);
     if (!el("logDialog").open) el("logDialog").showModal();
-    if (detail.job.status === "running") {
+    if (["queued", "running"].includes(detail.job.status)) {
       if (state.jobLogTimer) clearTimeout(state.jobLogTimer);
       state.jobLogTimer = setTimeout(() => {
         if (state.selectedJobId === jobId && el("logDialog").open) showJobLog(jobId);
