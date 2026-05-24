@@ -57,6 +57,13 @@ await store.failRunningJobs();
 const app = express();
 const processJobQueue = new AsyncJobQueue(config.processJobConcurrency);
 
+// Initialize queue concurrency from store settings asynchronously
+store.read().then((state) => {
+  if (state.settings?.processJobConcurrency) {
+    processJobQueue.concurrency = Math.max(1, Math.floor(Number(state.settings.processJobConcurrency) || 1));
+  }
+}).catch(() => {});
+
 app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/config", asyncRoute(async () => ({
@@ -69,6 +76,10 @@ app.get("/api/settings", asyncRoute(async () => {
 }));
 app.post("/api/settings", asyncRoute(async (req) => {
   const settings = await store.updateSettings(req.body.settings || {});
+  if (settings.processJobConcurrency) {
+    processJobQueue.concurrency = Math.max(1, Math.floor(Number(settings.processJobConcurrency) || 1));
+    processJobQueue.drain();
+  }
   return { ok: true, settings };
 }));
 app.get("/api/store", asyncRoute(() => store.read()));

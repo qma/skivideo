@@ -14,6 +14,7 @@ const emptyStore = {
   settings: {
     geminiLabelModel: "gemini-2.0-flash",
     useUnifiedSession: false,
+    processJobConcurrency: 1,
     labelSystemPrompt: `Extract skier athlete names from a skiing video transcript. 
 Use the provided candidate roster as the canonical source for names and spellings. 
 The event venue is {{venue}}, discipline is {{discipline}}, and date is {{date}}.

@@ -160,6 +160,7 @@ async function loadSettings() {
   
   el("geminiLabelModelInput").value = settings.geminiLabelModel || "gemini-2.0-flash";
   el("useUnifiedSessionInput").checked = Boolean(settings.useUnifiedSession);
+  el("processJobConcurrencyInput").value = settings.processJobConcurrency || state.config?.processJobConcurrency || 1;
 
   let systemPrompt = settings.labelSystemPrompt || "";
   let userPrompt = settings.labelUserPrompt || "";
@@ -206,6 +207,7 @@ Transcript: {{transcript}}`;
 async function saveSettings() {
   const geminiLabelModel = el("geminiLabelModelInput").value.trim();
   const useUnifiedSession = el("useUnifiedSessionInput").checked;
+  const processJobConcurrency = Number(el("processJobConcurrencyInput").value) || 1;
   const labelSystemPrompt = el("labelSystemPromptInput").value;
   const labelUserPrompt = el("labelUserPromptInput").value;
 
@@ -213,6 +215,7 @@ async function saveSettings() {
     settings: {
       geminiLabelModel,
       useUnifiedSession,
+      processJobConcurrency,
       labelSystemPrompt,
       labelUserPrompt
     }
