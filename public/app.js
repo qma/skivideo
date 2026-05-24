@@ -32,6 +32,7 @@ async function init() {
   state.config = await api("/api/config");
   await refresh();
   await runUrlAction();
+  await loadSettings();
 }
 
 function bindActions() {
@@ -127,7 +128,10 @@ function bindActions() {
     state.query = event.target.value;
     await renderSearch();
   });
-  el("openSettings").addEventListener("click", () => el("settingsDialog").showModal());
+  el("openSettings").addEventListener("click", async () => {
+    await loadSettings();
+    el("settingsDialog").showModal();
+  });
   el("saveSettings").addEventListener("click", saveSettings);
 }
 
@@ -140,11 +144,14 @@ async function refresh() {
   }
   renderStatus();
   renderFolders();
-  renderEventView();
+  
+  if (!isUserInteractingWithEventView()) {
+    renderEventView();
+  }
+
   renderJobsAndEvents();
   await renderSearch();
   scheduleJobPolling();
-  loadSettings();
 }
 
 async function loadSettings() {
@@ -933,4 +940,23 @@ function formatDateTime(value) {
     minute: "2-digit",
     second: "2-digit"
   });
+}
+
+function isUserInteractingWithEventView() {
+  const active = document.activeElement;
+  if (!active) return false;
+
+  // 1. Check if focus is inside any input, select, or textarea in the event view panel
+  const inEventPanel = active.closest("#eventViewPanel");
+  if (inEventPanel && (active.tagName === "INPUT" || active.tagName === "SELECT" || active.tagName === "TEXTAREA")) {
+    return true;
+  }
+
+  // 2. Check if there are checked checkboxes in the Live-timing races list
+  const hasCheckedRaces = document.querySelector("[data-live-timing-race]:checked") !== null;
+  if (hasCheckedRaces) {
+    return true;
+  }
+
+  return false;
 }
