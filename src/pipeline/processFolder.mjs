@@ -13,6 +13,11 @@ export async function processFolder(config, store, folderId, options = {}) {
   const jobId = options.jobId || stableId("job", `${folderId}:${startedAt}`);
   const jobType = options.reprocess ? "reprocess_folder" : "process_folder";
   const actionLabel = options.reprocess ? "Re-processing" : "Processing";
+
+  let state = await store.read();
+  const useUnifiedSession = Boolean(state.settings?.useUnifiedSession);
+  const activeParallel = useUnifiedSession ? 1 : parallel;
+
   await store.addJob({
     id: jobId,
     type: jobType,
@@ -20,11 +25,11 @@ export async function processFolder(config, store, folderId, options = {}) {
     status: "running",
     startedAt,
     updatedAt: startedAt,
-    parallel,
-    message: `${actionLabel} started with ${parallel} worker${parallel === 1 ? "" : "s"}`
+    parallel: activeParallel,
+    message: useUnifiedSession
+      ? `${actionLabel} started (Unified Session Mode, overriding to 1 worker)`
+      : `${actionLabel} started with ${parallel} worker${parallel === 1 ? "" : "s"}`
   });
-
-  let state = await store.read();
   let folder = state.folders.find((item) => item.id === folderId);
   if (!folder) throw new Error(`Folder not found: ${folderId}`);
   await store.updateJob(jobId, {
@@ -89,7 +94,13 @@ export async function processFolder(config, store, folderId, options = {}) {
   let cursor = 0;
   let writeQueue = Promise.resolve();
 
-  const useUnifiedSession = Boolean(state.settings?.useUnifiedSession);
+  let totalPromptTokens = 0;
+  let totalCandidatesTokens = 0;
+  let totalTokens = 0;
+  let totalCachedPromptTokens = 0;
+  let totalEstimatedCost = 0;
+  let geminiCallsCount = 0;
+
   const chatHistory = [];
 
   const enqueueWrite = (fn) => {
@@ -106,6 +117,15 @@ export async function processFolder(config, store, folderId, options = {}) {
     if (!video) return;
     try {
       const processed = await processVideo(config, video, folder, options, rootUrl, store, useUnifiedSession ? chatHistory : undefined);
+      const gemini = processed.labelDebug?.gemini || {};
+      if (gemini.usage) {
+        totalPromptTokens += gemini.usage.promptTokens || 0;
+        totalCandidatesTokens += gemini.usage.candidatesTokens || 0;
+        totalTokens += gemini.usage.totalTokens || 0;
+        totalCachedPromptTokens += gemini.usage.cachedPromptTokens || 0;
+        totalEstimatedCost += gemini.usage.estimatedCost || 0;
+        geminiCallsCount += 1;
+      }
       await enqueueWrite(() => store.updateVideo(video.id, processed));
       if (processed.processing.status === "indexed") indexed += 1;
       else needsReview += 1;
@@ -115,7 +135,7 @@ export async function processFolder(config, store, folderId, options = {}) {
         indexed,
         needsReview,
         failed,
-        parallel
+        parallel: activeParallel
       }));
     } catch (error) {
       failed += 1;
@@ -132,32 +152,51 @@ export async function processFolder(config, store, folderId, options = {}) {
         indexed,
         needsReview,
         failed,
-        parallel
+        parallel: activeParallel
       }));
     }
     return processNext();
   }
 
-  const activeParallel = useUnifiedSession ? 1 : parallel;
   await Promise.all(Array.from({ length: Math.min(activeParallel, videos.length) }, () => processNext()));
   await writeQueue;
 
+  const durationMs = new Date().getTime() - new Date(startedAt).getTime();
+  const durationSec = Math.round(durationMs / 1000);
+  const durationStr = durationSec >= 60 
+    ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` 
+    : `${durationSec}s`;
+
+  let message = `Done: ${indexed} indexed, ${needsReview} review, ${failed} failed in ${durationStr}.`;
+  if (geminiCallsCount > 0) {
+    const cacheHitRate = totalPromptTokens > 0 
+      ? Math.round((totalCachedPromptTokens / totalPromptTokens) * 100) 
+      : 0;
+    message += ` Gemini: ${geminiCallsCount} calls, ${totalTokens} total tokens (${cacheHitRate}% cache hit), Cost: $${totalEstimatedCost.toFixed(5)}.`;
+    if (useUnifiedSession) {
+      message += ` (Unified Session Mode)`;
+    }
+  }
+
   await store.updateJob(jobId, {
     status: failed ? "completed_with_errors" : "completed",
-    message: `Done: ${indexed} indexed, ${needsReview} review, ${failed} failed`,
+    message,
     completedAt: nowIso(),
     indexed,
     needsReview,
     failed,
-    parallel
+    parallel: activeParallel
   });
-  return { jobId, indexed, needsReview, failed, parallel };
+  return { jobId, indexed, needsReview, failed, parallel: activeParallel };
 }
 
 export async function relabelFolder(config, store, folderId, options = {}) {
   const startedAt = nowIso();
+  const state = await store.read();
+  const useUnifiedSession = Boolean(state.settings?.useUnifiedSession);
   const requestedParallel = Number(options.parallel || 4);
   const parallel = Number.isFinite(requestedParallel) ? Math.max(1, Math.min(16, Math.floor(requestedParallel))) : 4;
+  const activeParallel = useUnifiedSession ? 1 : parallel;
   const jobId = options.jobId || stableId("job", `relabel:${folderId}:${startedAt}`);
   if (!options.jobId) {
     await store.addJob({
@@ -167,20 +206,27 @@ export async function relabelFolder(config, store, folderId, options = {}) {
       status: "running",
       startedAt,
       updatedAt: startedAt,
-      parallel,
-      message: `Relabeling started with ${parallel} workers`
+      parallel: activeParallel,
+      message: useUnifiedSession
+        ? `Relabeling started (Unified Session Mode, overriding to 1 worker)`
+        : `Relabeling started with ${parallel} workers`
     });
   }
 
   try {
-    let state = await store.read();
-    const useUnifiedSession = Boolean(state.settings?.useUnifiedSession);
     const folder = withFallbackRoster(state, state.folders.find((item) => item.id === folderId));
     if (!folder) throw new Error(`Folder not found: ${folderId}`);
     const videos = state.videos.filter((video) => video.folderId === folderId);
     let indexed = 0;
     let needsReview = 0;
     let cursor = 0;
+
+    let totalPromptTokens = 0;
+    let totalCandidatesTokens = 0;
+    let totalTokens = 0;
+    let totalCachedPromptTokens = 0;
+    let totalEstimatedCost = 0;
+    let geminiCallsCount = 0;
 
     const chatHistory = [];
 
@@ -197,6 +243,15 @@ export async function relabelFolder(config, store, folderId, options = {}) {
         store,
         useUnifiedSession ? chatHistory : undefined
       );
+      const gemini = labelDebug?.gemini || {};
+      if (gemini.usage) {
+        totalPromptTokens += gemini.usage.promptTokens || 0;
+        totalCandidatesTokens += gemini.usage.candidatesTokens || 0;
+        totalTokens += gemini.usage.totalTokens || 0;
+        totalCachedPromptTokens += gemini.usage.cachedPromptTokens || 0;
+        totalEstimatedCost += gemini.usage.estimatedCost || 0;
+        geminiCallsCount += 1;
+      }
       const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
       const processing = {
         ...(video.processing || {}),
@@ -218,16 +273,33 @@ export async function relabelFolder(config, store, folderId, options = {}) {
       return processNext();
     }
 
-    const activeParallel = useUnifiedSession ? 1 : parallel;
     await Promise.all(Array.from({ length: Math.min(activeParallel, videos.length) }, () => processNext()));
 
-    const message = `Done: ${indexed} indexed, ${needsReview} review`;
+    const durationMs = new Date().getTime() - new Date(startedAt).getTime();
+    const durationSec = Math.round(durationMs / 1000);
+    const durationStr = durationSec >= 60 
+      ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` 
+      : `${durationSec}s`;
+
+    let message = `Done: ${indexed} indexed, ${needsReview} review in ${durationStr}.`;
+    if (geminiCallsCount > 0) {
+      const cacheHitRate = totalPromptTokens > 0 
+        ? Math.round((totalCachedPromptTokens / totalPromptTokens) * 100) 
+        : 0;
+      message += ` Gemini: ${geminiCallsCount} calls, ${totalTokens} total tokens (${cacheHitRate}% cache hit), Cost: $${totalEstimatedCost.toFixed(5)}.`;
+      if (useUnifiedSession) {
+        message += ` (Unified Session Mode)`;
+      }
+    }
+
     await store.updateJob(jobId, {
       status: "completed",
       message,
       completedAt: nowIso(),
       indexed,
-      needsReview
+      needsReview,
+      failed: 0,
+      parallel: activeParallel
     });
     return { folderId, videos: videos.length, indexed, needsReview, message };
   } catch (error) {
