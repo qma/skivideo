@@ -224,7 +224,7 @@ export class JsonStore {
     return this.mutate((store) => {
       const updatedAt = nowIso();
       store.jobs = store.jobs.map((job) => {
-        if (!["running", "queued"].includes(job.status)) return job;
+        if (job.status !== "running") return job;
         const nextJob = {
           ...job,
           status: "failed",

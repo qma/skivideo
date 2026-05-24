@@ -57,12 +57,69 @@ await store.failRunningJobs();
 const app = express();
 const processJobQueue = new AsyncJobQueue(config.processJobConcurrency);
 
-// Initialize queue concurrency from store settings asynchronously
+// Initialize queue concurrency from store settings asynchronously and restore queued jobs
 store.read().then((state) => {
   if (state.settings?.processJobConcurrency) {
     processJobQueue.concurrency = Math.max(1, Math.floor(Number(state.settings.processJobConcurrency) || 1));
   }
-}).catch(() => {});
+
+  // Restore queued jobs in chronological order (oldest first)
+  const queuedJobs = [...(state.jobs || [])]
+    .filter((job) => job.status === "queued")
+    .reverse();
+
+  for (const job of queuedJobs) {
+    const jobId = job.id;
+    const folderId = job.folderId;
+    const parallel = job.parallel || 4;
+    const type = job.type;
+    const options = job.options || {};
+
+    if (type === "process_folder" || type === "reprocess_folder") {
+      processJobQueue.enqueue(async () => {
+        try {
+          await processFolder(config, store, folderId, {
+            ...options,
+            jobId,
+            parallel
+          });
+        } catch (error) {
+          console.error(`Background processing failed for ${folderId} (restored):`, error);
+          await store.updateJob(jobId, {
+            status: "failed",
+            message: "Processing failed",
+            details: error.message,
+            completedAt: nowIso(),
+            parallel
+          });
+        }
+      });
+    } else if (type === "relabel_folder") {
+      processJobQueue.enqueue(async () => {
+        try {
+          await store.updateJob(jobId, {
+            status: "running",
+            message: `Relabeling started with ${parallel} workers`,
+            updatedAt: nowIso(),
+            parallel
+          });
+          await relabelFolder(config, store, folderId, { jobId, parallel });
+        } catch (error) {
+          console.error(`Background relabel failed for ${folderId} (restored):`, error);
+          await store.updateJob(jobId, {
+            status: "failed",
+            message: "Relabeling failed",
+            details: error.message,
+            completedAt: nowIso(),
+            parallel
+          });
+        }
+      });
+    }
+  }
+}).catch((error) => {
+  console.error("Failed to initialize queue or restore queued jobs at startup:", error);
+});
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -198,6 +255,7 @@ app.post("/api/process-folder-async", asyncRoute(async (req) => {
     startedAt: queuedAt,
     updatedAt: queuedAt,
     parallel,
+    options,
     message: jobsAhead
       ? `Queued behind ${jobsAhead} process job${jobsAhead === 1 ? "" : "s"}`
       : "Queued for processing"
