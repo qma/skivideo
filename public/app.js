@@ -480,7 +480,12 @@ function renderJobsAndEvents() {
     <article class="item jobItem ${jobClass(job)}">
       <div class="jobHeader">
         <strong>${escapeHtml([job.type, job.folderName].filter(Boolean).join(" · "))}</strong>
-        <a class="jobInspect" href="${escapeAttr(jobHref(job.id))}">Inspect</a>
+        <div class="jobActions">
+          <a class="jobInspect" href="${escapeAttr(jobHref(job.id))}">Inspect</a>
+          ${["failed", "completed_with_errors"].includes(job.status) ? `
+            <button class="jobRerun" onclick="rerunJob('${escapeAttr(job.id)}')">Rerun</button>
+          ` : ""}
+        </div>
       </div>
       <p><span class="jobStatusDot"></span>${escapeHtml(job.status)} · ${escapeHtml(job.message || "")}</p>
       <div class="jobMeta">${escapeHtml(jobMeta(job))}</div>
@@ -963,3 +968,8 @@ function isUserInteractingWithEventView() {
 
   return false;
 }
+
+async function rerunJob(jobId) {
+  await action("/api/rerun-job-async", { jobId });
+}
+window.rerunJob = rerunJob;

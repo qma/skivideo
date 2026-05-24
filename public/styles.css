@@ -443,6 +443,30 @@ select {
   text-decoration: none;
 }
 
+.jobActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.jobRerun {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.jobRerun:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
 .pillRow {
   display: flex;
   flex-wrap: wrap;

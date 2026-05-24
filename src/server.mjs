@@ -301,6 +301,106 @@ app.post("/api/relabel-folder", asyncRoute((req) => relabelFolder(config, store,
 app.post("/api/relabel-folder-async", asyncRoute(async (req) => {
   return queueRelabelFolder(req.body.folderId, { parallel: req.body.parallel });
 }));
+app.post("/api/rerun-job-async", asyncRoute(async (req) => {
+  const { jobId } = req.body;
+  if (!jobId) throw new Error("jobId is required.");
+
+  const state = await store.read();
+  const job = state.jobs.find((j) => j.id === jobId);
+  if (!job) throw new Error(`Job not found: ${jobId}`);
+
+  const folderId = job.folderId;
+  const parallel = normalizeParallel(job.parallel, 4);
+
+  if (job.type === "process_folder" || job.type === "reprocess_folder") {
+    const reprocess = job.type === "reprocess_folder";
+    const queuedAt = nowIso();
+    const newJobId = stableId("job", `${reprocess ? "reprocess" : "process"}:${folderId}:${queuedAt}`);
+
+    const options = {
+      ...(job.options || {}),
+      jobId: newJobId,
+      parallel
+    };
+
+    const queueStats = processJobQueue.stats();
+    const jobsAhead = queueStats.active + queueStats.pending;
+
+    await store.addJob({
+      id: newJobId,
+      type: job.type,
+      folderId,
+      status: "queued",
+      startedAt: queuedAt,
+      updatedAt: queuedAt,
+      parallel,
+      options,
+      message: jobsAhead
+        ? `Queued behind ${jobsAhead} process job${jobsAhead === 1 ? "" : "s"}`
+        : "Queued for processing"
+    });
+
+    processJobQueue.enqueue(async () => {
+      try {
+        await processFolder(config, store, folderId, options);
+      } catch (error) {
+        console.error(`Background processing failed for ${folderId}:`, error);
+        await store.updateJob(newJobId, {
+          status: "failed",
+          message: "Processing failed",
+          details: error.message,
+          completedAt: nowIso(),
+          parallel
+        });
+      }
+    });
+
+    return { ok: true, jobId: newJobId, message: "Job rerun enqueued." };
+  } else if (job.type === "relabel_folder") {
+    const queuedAt = nowIso();
+    const newJobId = stableId("job", `relabel:${folderId}:${queuedAt}`);
+    const queueStats = processJobQueue.stats();
+    const jobsAhead = queueStats.active + queueStats.pending;
+
+    await store.addJob({
+      id: newJobId,
+      type: "relabel_folder",
+      folderId,
+      status: "queued",
+      startedAt: queuedAt,
+      updatedAt: queuedAt,
+      parallel,
+      message: jobsAhead
+        ? `Queued behind ${jobsAhead} background job${jobsAhead === 1 ? "" : "s"}`
+        : "Queued for relabeling"
+    });
+
+    processJobQueue.enqueue(async () => {
+      try {
+        await store.updateJob(newJobId, {
+          status: "running",
+          message: `Relabeling started with ${parallel} workers`,
+          updatedAt: nowIso(),
+          parallel
+        });
+        await relabelFolder(config, store, folderId, { jobId: newJobId, parallel });
+      } catch (error) {
+        console.error(`Background relabel failed for ${folderId}:`, error);
+        await store.updateJob(newJobId, {
+          status: "failed",
+          message: "Relabeling failed",
+          details: error.message,
+          completedAt: nowIso(),
+          parallel
+        });
+      }
+    });
+
+    return { ok: true, jobId: newJobId, message: "Relabel rerun enqueued." };
+  } else {
+    throw new Error(`Unsupported job type for rerun: ${job.type}`);
+  }
+}));
 async function queueRelabelFolder(folderId, options = {}) {
   if (!folderId) throw new Error("folderId is required.");
   const existing = await activeFolderJob(folderId, "relabel_folder");
