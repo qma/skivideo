@@ -17,3 +17,5 @@ apps/public-next/out/
 apps/public-next/public/data/
 *.log
 .vercel
+.antigravitycli/
+
