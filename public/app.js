@@ -85,6 +85,31 @@ function bindActions() {
     if (skip) confirmNoLiveTiming();
   });
   el("eventViewPanel").addEventListener("click", async (event) => {
+    const inspect = event.target.closest("[data-inspect-llm]");
+    if (inspect) {
+      const videoId = inspect.dataset.inspectLlm;
+      const video = state.eventDetail?.videos?.find((v) => v.id === videoId);
+      if (video?.labelDebug) {
+        const debugInfo = {};
+        if (video.labelDebug.gemini?.request || video.labelDebug.gemini?.response) {
+          debugInfo.gemini = {
+            request: video.labelDebug.gemini.request,
+            response: video.labelDebug.gemini.response
+          };
+        }
+        if (video.labelDebug.openAi?.request || video.labelDebug.openAi?.response) {
+          debugInfo.openAi = {
+            request: video.labelDebug.openAi.request,
+            response: video.labelDebug.openAi.response
+          };
+        }
+        showLog(Object.keys(debugInfo).length ? debugInfo : { message: "No LLM request/response logs found for this video.", labelDebug: video.labelDebug });
+      } else {
+        showLog({ message: "No debug information available for this video." });
+      }
+      return;
+    }
+
     const save = event.target.closest("[data-manual-label]");
     const clear = event.target.closest("[data-clear-golden-label]");
     if (!save && !clear) return;
@@ -268,7 +293,14 @@ function renderEventView() {
           `;
         }).join("") : `<span class="muted">Unlabeled</span>`}</td>
         <td><span class="pill ${status === "failed" ? "bad" : status === "needs_review" ? "warn" : ""}">${escapeHtml(status)}</span></td>
-        <td class="labelDebugCell">${renderLabelDebug(video.labelDebug, debugLabel || best)}</td>
+        <td class="labelDebugCell">
+          ${renderLabelDebug(video.labelDebug, debugLabel || best)}
+          ${video.labelDebug?.gemini?.request || video.labelDebug?.gemini?.response || video.labelDebug?.openAi?.request || video.labelDebug?.openAi?.response ? `
+            <div style="margin-top: 6px;">
+              <button class="subtleButton inspectLlmButton" data-inspect-llm="${escapeAttr(video.id)}" style="font-size: 10px; padding: 2px 6px;">Inspect LLM</button>
+            </div>
+          ` : ""}
+        </td>
         <td class="transcriptCell">${escapeHtml(video.transcript?.text || "")}</td>
         <td>
           <div class="reviewTools">

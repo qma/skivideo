@@ -13,12 +13,14 @@ export async function labelVideoAthletesWithDebug(config, video, folder, store) 
 
   if (config.geminiApiKey && (process.env.LLM_LABEL_MODE === "always" || !heuristicLabelsOnly.length)) {
     try {
-      const { labels: geminiLabels, usage } = await labelWithGemini(config, video, folder, store);
+      const { labels: geminiLabels, usage, request, response } = await labelWithGemini(config, video, folder, store);
       const labels = mergeLabels(heuristicLabelsOnly, geminiLabels);
       debug.gemini = {
         mode: process.env.LLM_LABEL_MODE === "always" ? "always" : "fallback",
         labels: geminiLabels.length,
-        usage
+        usage,
+        request,
+        response
       };
       debug.finalLabels = labels.map(debugLabelSummary);
       return { labels, debug };
@@ -28,9 +30,14 @@ export async function labelVideoAthletesWithDebug(config, video, folder, store) 
   }
 
   if (config.openaiApiKey && process.env.LLM_LABEL_MODE === "always") {
-    const openAiLabels = await labelWithOpenAi(config, video, folder);
+    const { labels: openAiLabels, request, response } = await labelWithOpenAi(config, video, folder);
     const labels = mergeLabels(heuristicLabelsOnly, openAiLabels);
-    debug.openAi = { mode: "always", labels: openAiLabels.length };
+    debug.openAi = {
+      mode: "always",
+      labels: openAiLabels.length,
+      request,
+      response
+    };
     debug.finalLabels = labels.map(debugLabelSummary);
     return { labels, debug };
   }
@@ -39,8 +46,13 @@ export async function labelVideoAthletesWithDebug(config, video, folder, store) 
     debug.finalLabels = heuristicLabelsOnly.map(debugLabelSummary);
     return { labels: heuristicLabelsOnly, debug };
   }
-  const labels = await labelWithOpenAi(config, video, folder);
-  debug.openAi = { mode: "fallback_no_deterministic_labels", labels: labels.length };
+  const { labels, request, response } = await labelWithOpenAi(config, video, folder);
+  debug.openAi = {
+    mode: "fallback_no_deterministic_labels",
+    labels: labels.length,
+    request,
+    response
+  };
   debug.finalLabels = labels.map(debugLabelSummary);
   return { labels, debug };
 }
@@ -219,10 +231,10 @@ async function labelWithGemini(config, video, folder, store) {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiLabelModel}:generateContent?key=${config.geminiApiKey}`;
 
-  const response = await fetch(url, {
-    method: "POST",
+  const requestPayload = {
+    url: `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiLabelModel}:generateContent?key=REDACTED_API_KEY`,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body: {
       contents: [
         {
           role: "user",
@@ -232,7 +244,13 @@ async function labelWithGemini(config, video, folder, store) {
       generationConfig: {
         responseMimeType: "application/json"
       }
-    })
+    }
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestPayload.body)
   });
 
   if (!response.ok) {
@@ -265,18 +283,19 @@ async function labelWithGemini(config, video, folder, store) {
     methodVersion: `gemini-${config.geminiLabelModel}-v1`
   })));
 
-  return { labels, usage: stats };
+  return { labels, usage: stats, request: requestPayload, response: json };
 }
 
 async function labelWithOpenAi(config, video, folder) {
   const roster = (folder?.candidateRoster || []).map((racer) => `${racer.name}${racer.bib ? ` bib ${racer.bib}` : ""}${racer.club ? ` club ${racer.club}` : ""}`).join("\n");
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
+  
+  const requestPayload = {
+    url: "https://api.openai.com/v1/responses",
     headers: {
-      authorization: `Bearer ${config.openaiApiKey}`,
-      "content-type": "application/json"
+      "Content-Type": "application/json",
+      "Authorization": "Bearer REDACTED_API_KEY"
     },
-    body: JSON.stringify({
+    body: {
       model: config.openaiLabelModel,
       input: [
         {
@@ -319,17 +338,29 @@ async function labelWithOpenAi(config, video, folder) {
           }
         }
       }
-    })
+    }
+  };
+
+  const response = await fetch(requestPayload.url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.openaiApiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(requestPayload.body)
   });
   if (!response.ok) throw new Error(`OpenAI label request failed: ${response.status} ${await response.text()}`);
   const json = await response.json();
   const text = json.output_text || json.output?.flatMap((item) => item.content || []).map((c) => c.text).join("") || "{}";
   const parsed = JSON.parse(text);
-  return sanitizeExternalLabels((parsed.labels || []).map((label) => ({
+  
+  const labels = sanitizeExternalLabels((parsed.labels || []).map((label) => ({
     ...label,
     source: "llm_audio_roster_reasoning",
     methodVersion: "openai-json-v1"
   })));
+
+  return { labels, request: requestPayload, response: json };
 }
 
 function evidenceSnippet(text, name) {
