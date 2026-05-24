@@ -271,13 +271,13 @@ function renderFolders() {
           <span>${stats.needsReview || 0} review · ${stats.failed || 0} failed</span>
         </div>
         <div class="eventActions">
-          <a class="actionLink" href="${escapeAttr(actionHref("view", folder.id))}" title="${escapeAttr(actionTips.view)}" aria-label="${escapeAttr(actionTips.view)}">View</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("live", folder.id))}" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("relabel", folder.id))}" title="${escapeAttr(actionTips.relabel)}" aria-label="${escapeAttr(actionTips.relabel)}">Relabel</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("reprocess", folder.id))}" title="${escapeAttr(actionTips.reprocess)}" aria-label="${escapeAttr(actionTips.reprocess)}">Re-Process</a>
-          <a class="actionLink resetActionLink" href="${escapeAttr(actionHref("reset", folder.id))}" title="${escapeAttr(actionTips.reset)}" aria-label="${escapeAttr(actionTips.reset)}">Reset</a>
+          <a class="actionLink" href="${escapeAttr(actionHref("view", folder.id))}" onclick="handleEventAction(event, 'view', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.view)}" aria-label="${escapeAttr(actionTips.view)}">View</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("live", folder.id))}" onclick="handleEventAction(event, 'live', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" onclick="handleEventAction(event, 'prepare', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("relabel", folder.id))}" onclick="handleEventAction(event, 'relabel', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.relabel)}" aria-label="${escapeAttr(actionTips.relabel)}">Relabel</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" onclick="handleEventAction(event, 'process', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
+          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("reprocess", folder.id))}" onclick="handleEventAction(event, 'reprocess', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.reprocess)}" aria-label="${escapeAttr(actionTips.reprocess)}">Re-Process</a>
+          <a class="actionLink resetActionLink" href="${escapeAttr(actionHref("reset", folder.id))}" onclick="handleEventAction(event, 'reset', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.reset)}" aria-label="${escapeAttr(actionTips.reset)}">Reset</a>
         </div>
       </article>
     `;
@@ -973,3 +973,23 @@ async function rerunJob(jobId) {
   await action("/api/rerun-job-async", { jobId });
 }
 window.rerunJob = rerunJob;
+
+async function handleEventAction(e, actionName, folderId) {
+  if (e) e.preventDefault();
+  if (actionName === "view") {
+    await openEvent(folderId);
+  } else if (actionName === "live") {
+    await action("/api/correlate-folder-live-timing", { folderId });
+  } else if (actionName === "prepare") {
+    await action("/api/prepare-folder", { folderId });
+  } else if (actionName === "relabel") {
+    await relabelFolder(folderId);
+  } else if (actionName === "process") {
+    await startProcessing(folderId);
+  } else if (actionName === "reprocess") {
+    await startReprocessing(folderId);
+  } else if (actionName === "reset") {
+    await resetFolder(folderId);
+  }
+}
+window.handleEventAction = handleEventAction;
