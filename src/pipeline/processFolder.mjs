@@ -16,7 +16,6 @@ export async function processFolder(config, store, folderId, options = {}) {
 
   let state = await store.read();
   const useUnifiedSession = Boolean(state.settings?.useUnifiedSession);
-  const activeParallel = useUnifiedSession ? 1 : parallel;
 
   await store.addJob({
     id: jobId,
@@ -25,9 +24,9 @@ export async function processFolder(config, store, folderId, options = {}) {
     status: "running",
     startedAt,
     updatedAt: startedAt,
-    parallel: activeParallel,
+    parallel,
     message: useUnifiedSession
-      ? `${actionLabel} started (Unified Session Mode, overriding to 1 worker)`
+      ? `${actionLabel} started (Unified Session Mode: parallel ingestion, sequential LLM labeling)`
       : `${actionLabel} started with ${parallel} worker${parallel === 1 ? "" : "s"}`
   });
   let folder = state.folders.find((item) => item.id === folderId);
@@ -101,8 +100,6 @@ export async function processFolder(config, store, folderId, options = {}) {
   let totalEstimatedCost = 0;
   let geminiCallsCount = 0;
 
-  const chatHistory = [];
-
   const enqueueWrite = (fn) => {
     const next = writeQueue.then(fn, fn);
     writeQueue = next.catch(() => {});
@@ -111,31 +108,43 @@ export async function processFolder(config, store, folderId, options = {}) {
 
   const rootUrl = await lookupSharePointRootUrl(config, store, folder);
 
+  const ingestOptions = {
+    ...options,
+    skipLabeling: useUnifiedSession
+  };
+
   async function processNext() {
     const video = videos[cursor];
     cursor += 1;
     if (!video) return;
     try {
-      const processed = await processVideo(config, video, folder, options, rootUrl, store, useUnifiedSession ? chatHistory : undefined);
-      const gemini = processed.labelDebug?.gemini || {};
-      if (gemini.usage) {
-        totalPromptTokens += gemini.usage.promptTokens || 0;
-        totalCandidatesTokens += gemini.usage.candidatesTokens || 0;
-        totalTokens += gemini.usage.totalTokens || 0;
-        totalCachedPromptTokens += gemini.usage.cachedPromptTokens || 0;
-        totalEstimatedCost += gemini.usage.estimatedCost || 0;
-        geminiCallsCount += 1;
+      const processed = await processVideo(config, video, folder, ingestOptions, rootUrl, store, undefined);
+      
+      if (!useUnifiedSession) {
+        const gemini = processed.labelDebug?.gemini || {};
+        if (gemini.usage) {
+          totalPromptTokens += gemini.usage.promptTokens || 0;
+          totalCandidatesTokens += gemini.usage.candidatesTokens || 0;
+          totalTokens += gemini.usage.totalTokens || 0;
+          totalCachedPromptTokens += gemini.usage.cachedPromptTokens || 0;
+          totalEstimatedCost += gemini.usage.estimatedCost || 0;
+          geminiCallsCount += 1;
+        }
+        if (processed.processing.status === "indexed") indexed += 1;
+        else needsReview += 1;
       }
+
       await enqueueWrite(() => store.updateVideo(video.id, processed));
-      if (processed.processing.status === "indexed") indexed += 1;
-      else needsReview += 1;
+      
       await enqueueWrite(() => store.updateJob(jobId, {
-        message: `Processed ${indexed + needsReview + failed}/${videos.length}`,
+        message: useUnifiedSession
+          ? `Parallel Ingestion: Processed ${cursor}/${videos.length} videos`
+          : `Processed ${indexed + needsReview + failed}/${videos.length}`,
         details: "",
         indexed,
         needsReview,
         failed,
-        parallel: activeParallel
+        parallel
       }));
     } catch (error) {
       failed += 1;
@@ -152,14 +161,62 @@ export async function processFolder(config, store, folderId, options = {}) {
         indexed,
         needsReview,
         failed,
-        parallel: activeParallel
+        parallel
       }));
     }
     return processNext();
   }
 
-  await Promise.all(Array.from({ length: Math.min(activeParallel, videos.length) }, () => processNext()));
+  // Phase 1: Parallel Ingestion (Download + Transcription)
+  await Promise.all(Array.from({ length: Math.min(parallel, videos.length) }, () => processNext()));
   await writeQueue;
+
+  // Phase 2: Sequential LLM Labeling (Only when unified session is true)
+  if (useUnifiedSession && !failed) {
+    state = await store.read();
+    const freshVideos = state.videos.filter((v) => v.folderId === folderId);
+
+    await store.updateJob(jobId, {
+      message: "Ingestion complete. Starting sequential LLM labeling...",
+      parallel
+    });
+
+    const chatHistory = [];
+    for (let i = 0; i < freshVideos.length; i++) {
+      const video = freshVideos[i];
+      if (video.processing?.status === "failed") continue;
+
+      const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder, store, chatHistory);
+      const gemini = labelDebug?.gemini || {};
+      if (gemini.usage) {
+        totalPromptTokens += gemini.usage.promptTokens || 0;
+        totalCandidatesTokens += gemini.usage.candidatesTokens || 0;
+        totalTokens += gemini.usage.totalTokens || 0;
+        totalCachedPromptTokens += gemini.usage.cachedPromptTokens || 0;
+        totalEstimatedCost += gemini.usage.estimatedCost || 0;
+        geminiCallsCount += 1;
+      }
+
+      const bestConfidence = Math.max(0, ...athleteLabels.map((l) => Number(l.confidence) || 0));
+      const processing = {
+        ...(video.processing || {}),
+        status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
+        processedAt: nowIso()
+      };
+
+      await store.updateVideo(video.id, { athleteLabels, labelDebug, processing });
+      if (processing.status === "indexed") indexed += 1;
+      else needsReview += 1;
+
+      await store.updateJob(jobId, {
+        message: `Sequential Labeling: ${i + 1}/${freshVideos.length} processed`,
+        indexed,
+        needsReview,
+        failed,
+        parallel
+      });
+    }
+  }
 
   const durationMs = new Date().getTime() - new Date(startedAt).getTime();
   const durationSec = Math.round(durationMs / 1000);
@@ -185,9 +242,9 @@ export async function processFolder(config, store, folderId, options = {}) {
     indexed,
     needsReview,
     failed,
-    parallel: activeParallel
+    parallel
   });
-  return { jobId, indexed, needsReview, failed, parallel: activeParallel };
+  return { jobId, indexed, needsReview, failed, parallel };
 }
 
 export async function relabelFolder(config, store, folderId, options = {}) {
@@ -387,6 +444,15 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
     } else {
       errors.push("Media transcription skipped: local audio/video unavailable and downloads disabled.");
     }
+  }
+
+  if (options.skipLabeling) {
+    next.processing = {
+      status: "needs_review",
+      errors,
+      processedAt: nowIso()
+    };
+    return next;
   }
 
   const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, next, folder, store, chatHistory);
