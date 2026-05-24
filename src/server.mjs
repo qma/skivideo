@@ -52,19 +52,32 @@ class AsyncJobQueue {
 const config = loadConfig();
 const store = new JsonStore(config);
 await store.ensure();
-await store.failRunningJobs();
 
 const app = express();
 const processJobQueue = new AsyncJobQueue(config.processJobConcurrency);
 
-// Initialize queue concurrency from store settings asynchronously and restore queued jobs
-store.read().then((state) => {
+// Initialize queue concurrency from store settings asynchronously and restore queued/running jobs
+store.read().then(async (state) => {
   if (state.settings?.processJobConcurrency) {
     processJobQueue.concurrency = Math.max(1, Math.floor(Number(state.settings.processJobConcurrency) || 1));
   }
 
-  // Restore queued jobs in chronological order (oldest first)
-  const queuedJobs = [...(state.jobs || [])]
+  // 1. Identify interrupted running jobs and reset them to queued state
+  const runningJobs = (state.jobs || []).filter((job) => job.status === "running");
+  for (const job of runningJobs) {
+    console.log(`Resuming interrupted running job ${job.id} (server restart detected)`);
+    await store.updateJob(job.id, {
+      status: "queued",
+      message: "Queued for resumption (interrupted by server restart)",
+      updatedAt: nowIso()
+    });
+  }
+
+  // Read the fresh state after resetting running jobs
+  const freshState = await store.read();
+
+  // 2. Restore queued jobs in chronological order (oldest first)
+  const queuedJobs = [...(freshState.jobs || [])]
     .filter((job) => job.status === "queued")
     .reverse();
 
