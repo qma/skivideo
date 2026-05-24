@@ -462,7 +462,8 @@ function mergeLabels(...groups) {
   const flattened = sanitizeExternalLabels(groups.flat());
   const llmLabels = flattened.filter((l) => l.source && (l.source.includes("gemini") || l.source.includes("openai")));
   if (llmLabels.length > 0) {
-    return dedupeLabels(llmLabels).sort((a, b) => b.confidence - a.confidence);
+    const deterministicHighConf = flattened.filter((l) => l.confidence >= 0.8 && (!l.source || (!l.source.includes("gemini") && !l.source.includes("openai"))));
+    return dedupeLabels([...llmLabels, ...deterministicHighConf]).sort((a, b) => b.confidence - a.confidence);
   }
   return dedupeLabels(flattened).sort((a, b) => b.confidence - a.confidence);
 }
