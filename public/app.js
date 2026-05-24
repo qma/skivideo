@@ -149,17 +149,70 @@ async function refresh() {
 
 async function loadSettings() {
   const data = await api("/api/settings");
-  if (data?.settings?.labelPrompt) {
-    el("labelPromptInput").value = data.settings.labelPrompt;
+  const settings = data?.settings || {};
+  
+  el("geminiLabelModelInput").value = settings.geminiLabelModel || "gemini-2.0-flash";
+  el("useUnifiedSessionInput").checked = Boolean(settings.useUnifiedSession);
+
+  let systemPrompt = settings.labelSystemPrompt || "";
+  let userPrompt = settings.labelUserPrompt || "";
+  if (!systemPrompt && !userPrompt) {
+    if (settings.labelPrompt) {
+      const idx = settings.labelPrompt.indexOf("Input Data:");
+      if (idx !== -1) {
+        systemPrompt = settings.labelPrompt.substring(0, idx).trim();
+        userPrompt = settings.labelPrompt.substring(idx).trim();
+      } else {
+        systemPrompt = settings.labelPrompt;
+        userPrompt = "Input Data:\nFilename: {{filename}}\nTranscript: {{transcript}}";
+      }
+    } else {
+      systemPrompt = `Extract skier athlete names from a skiing video transcript. 
+Use the provided candidate roster as the canonical source for names and spellings. 
+The event venue is {{venue}}, discipline is {{discipline}}, and date is {{date}}.
+
+Candidate Roster:
+{{roster}}
+
+Focus on identifying athletes actually featured in the video or explicitly called out as "in the gate", "on course", etc.
+Allow for fuzzy/phonetic matches based on common transcription errors.
+
+Output up to the top 5 candidates as a JSON array of objects. 
+Each object MUST have: 
+"name" (canonical name from roster), 
+"probability" (0-1), 
+"evidence" (short snippet from transcript),
+"thought" (1-sentence reasoning why this athlete matches, e.g. "Transcript heard 'Zosia' which is a unique first name match for Zosia Buchanan"),
+"matchedRoster" (boolean).
+The "probability" values across all candidates in the list MUST sum to 1.0 (Bayesian normalization).
+Return COMPACT JSON ONLY. No preamble.`;
+      userPrompt = `Input Data:
+Filename: {{filename}}
+Transcript: {{transcript}}`;
+    }
   }
+
+  el("labelSystemPromptInput").value = systemPrompt;
+  el("labelUserPromptInput").value = userPrompt;
 }
 
 async function saveSettings() {
-  const labelPrompt = el("labelPromptInput").value;
-  const result = await action("/api/settings", { settings: { labelPrompt } });
+  const geminiLabelModel = el("geminiLabelModelInput").value.trim();
+  const useUnifiedSession = el("useUnifiedSessionInput").checked;
+  const labelSystemPrompt = el("labelSystemPromptInput").value;
+  const labelUserPrompt = el("labelUserPromptInput").value;
+
+  const result = await action("/api/settings", {
+    settings: {
+      geminiLabelModel,
+      useUnifiedSession,
+      labelSystemPrompt,
+      labelUserPrompt
+    }
+  });
   if (result?.ok) {
     el("settingsDialog").close();
-    showLog({ ok: true, message: "LLM prompt settings saved successfully." });
+    showLog({ ok: true, message: "LLM prompt & model settings saved successfully." });
   }
 }
 

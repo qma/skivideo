@@ -89,6 +89,9 @@ export async function processFolder(config, store, folderId, options = {}) {
   let cursor = 0;
   let writeQueue = Promise.resolve();
 
+  const useUnifiedSession = Boolean(state.settings?.useUnifiedSession);
+  const chatHistory = [];
+
   const enqueueWrite = (fn) => {
     const next = writeQueue.then(fn, fn);
     writeQueue = next.catch(() => {});
@@ -102,7 +105,7 @@ export async function processFolder(config, store, folderId, options = {}) {
     cursor += 1;
     if (!video) return;
     try {
-      const processed = await processVideo(config, video, folder, options, rootUrl, store);
+      const processed = await processVideo(config, video, folder, options, rootUrl, store, useUnifiedSession ? chatHistory : undefined);
       await enqueueWrite(() => store.updateVideo(video.id, processed));
       if (processed.processing.status === "indexed") indexed += 1;
       else needsReview += 1;
@@ -135,7 +138,8 @@ export async function processFolder(config, store, folderId, options = {}) {
     return processNext();
   }
 
-  await Promise.all(Array.from({ length: Math.min(parallel, videos.length) }, () => processNext()));
+  const activeParallel = useUnifiedSession ? 1 : parallel;
+  await Promise.all(Array.from({ length: Math.min(activeParallel, videos.length) }, () => processNext()));
   await writeQueue;
 
   await store.updateJob(jobId, {
@@ -170,6 +174,7 @@ export async function relabelFolder(config, store, folderId, options = {}) {
 
   try {
     let state = await store.read();
+    const useUnifiedSession = Boolean(state.settings?.useUnifiedSession);
     const folder = withFallbackRoster(state, state.folders.find((item) => item.id === folderId));
     if (!folder) throw new Error(`Folder not found: ${folderId}`);
     const videos = state.videos.filter((video) => video.folderId === folderId);
@@ -177,13 +182,21 @@ export async function relabelFolder(config, store, folderId, options = {}) {
     let needsReview = 0;
     let cursor = 0;
 
+    const chatHistory = [];
+
     async function processNext() {
       const video = videos[cursor];
       const index = cursor;
       cursor += 1;
       if (!video) return;
 
-      const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, video, folder, store);
+      const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(
+        config,
+        video,
+        folder,
+        store,
+        useUnifiedSession ? chatHistory : undefined
+      );
       const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
       const processing = {
         ...(video.processing || {}),
@@ -205,7 +218,8 @@ export async function relabelFolder(config, store, folderId, options = {}) {
       return processNext();
     }
 
-    await Promise.all(Array.from({ length: Math.min(parallel, videos.length) }, () => processNext()));
+    const activeParallel = useUnifiedSession ? 1 : parallel;
+    await Promise.all(Array.from({ length: Math.min(activeParallel, videos.length) }, () => processNext()));
 
     const message = `Done: ${indexed} indexed, ${needsReview} review`;
     await store.updateJob(jobId, {
@@ -227,7 +241,7 @@ export async function relabelFolder(config, store, folderId, options = {}) {
   }
 }
 
-export async function processVideo(config, video, folder, options = {}, rootUrl = config.sharepointRootUrl, store = null) {
+export async function processVideo(config, video, folder, options = {}, rootUrl = config.sharepointRootUrl, store = null, chatHistory = undefined) {
   const next = structuredClone(video);
   const errors = [];
   const forceTranscribe = Boolean(options.forceTranscribe);
@@ -303,7 +317,7 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
     }
   }
 
-  const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, next, folder, store);
+  const { labels: athleteLabels, debug: labelDebug } = await labelVideoAthletesWithDebug(config, next, folder, store, chatHistory);
   next.athleteLabels = athleteLabels;
   next.labelDebug = labelDebug;
   if (next.transcript) {

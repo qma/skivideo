@@ -6,14 +6,14 @@ export async function labelVideoAthletes(config, video, folder, store) {
   return result.labels;
 }
 
-export async function labelVideoAthletesWithDebug(config, video, folder, store) {
+export async function labelVideoAthletesWithDebug(config, video, folder, store, chatHistory) {
   const heuristic = heuristicLabelsWithDebug(video, folder);
   const debug = heuristic.debug;
   const heuristicLabelsOnly = heuristic.labels;
 
   if (config.geminiApiKey && (process.env.LLM_LABEL_MODE === "always" || !heuristicLabelsOnly.length)) {
     try {
-      const { labels: geminiLabels, usage, request, response } = await labelWithGemini(config, video, folder, store);
+      const { labels: geminiLabels, usage, request, response } = await labelWithGemini(config, video, folder, store, chatHistory);
       const labels = mergeLabels(heuristicLabelsOnly, geminiLabels);
       debug.gemini = {
         mode: process.env.LLM_LABEL_MODE === "always" ? "always" : "fallback",
@@ -212,39 +212,93 @@ function heuristicLabelsWithDebug(video, folder) {
   return { labels: finalLabels, debug };
 }
 
-async function labelWithGemini(config, video, folder, store) {
+async function labelWithGemini(config, video, folder, store, chatHistory) {
   const state = await store.read();
-  const promptTemplate = state.settings?.labelPrompt || "";
-  if (!promptTemplate) return { labels: [], usage: null };
+  const modelName = state.settings?.geminiLabelModel || config.geminiLabelModel || "gemini-2.0-flash";
+
+  let systemPrompt = state.settings?.labelSystemPrompt || "";
+  let userPrompt = state.settings?.labelUserPrompt || "";
+  if (!systemPrompt && !userPrompt) {
+    const oldPrompt = state.settings?.labelPrompt || "";
+    if (oldPrompt) {
+      const idx = oldPrompt.indexOf("Input Data:");
+      if (idx !== -1) {
+        systemPrompt = oldPrompt.substring(0, idx).trim();
+        userPrompt = oldPrompt.substring(idx).trim();
+      } else {
+        systemPrompt = oldPrompt;
+        userPrompt = "Input Data:\nFilename: {{filename}}\nTranscript: {{transcript}}";
+      }
+    } else {
+      systemPrompt = `Extract skier athlete names from a skiing video transcript. 
+Use the provided candidate roster as the canonical source for names and spellings. 
+The event venue is {{venue}}, discipline is {{discipline}}, and date is {{date}}.
+
+Candidate Roster:
+{{roster}}
+
+Focus on identifying athletes actually featured in the video or explicitly called out as "in the gate", "on course", etc.
+Allow for fuzzy/phonetic matches based on common transcription errors.
+
+Output up to the top 5 candidates as a JSON array of objects. 
+Each object MUST have: 
+"name" (canonical name from roster), 
+"probability" (0-1), 
+"evidence" (short snippet from transcript),
+"thought" (1-sentence reasoning why this athlete matches, e.g. "Transcript heard 'Zosia' which is a unique first name match for Zosia Buchanan"),
+"matchedRoster" (boolean).
+The "probability" values across all candidates in the list MUST sum to 1.0 (Bayesian normalization).
+Return COMPACT JSON ONLY. No preamble.`;
+      userPrompt = `Input Data:
+Filename: {{filename}}
+Transcript: {{transcript}}`;
+    }
+  }
 
   const rosterText = (folder?.candidateRoster || [])
     .map((racer) => `${racer.name}${racer.bib ? ` bib ${racer.bib}` : ""}${racer.team || racer.club ? ` team ${racer.team || racer.club}` : ""}`)
     .join("\n");
 
-  const prompt = promptTemplate
+  const finalSystemPrompt = systemPrompt
     .replaceAll("{{roster}}", rosterText)
+    .replaceAll("{{venue}}", folder?.eventMatch?.venue || "unknown")
+    .replaceAll("{{discipline}}", folder?.eventMatch?.discipline || "unknown")
+    .replaceAll("{{date}}", folder?.eventMatch?.date || "unknown");
+
+  const finalUserPrompt = userPrompt
     .replaceAll("{{filename}}", video.filename || "")
     .replaceAll("{{transcript}}", video.transcript?.text || "")
     .replaceAll("{{venue}}", folder?.eventMatch?.venue || "unknown")
     .replaceAll("{{discipline}}", folder?.eventMatch?.discipline || "unknown")
     .replaceAll("{{date}}", folder?.eventMatch?.date || "unknown");
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiLabelModel}:generateContent?key=${config.geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${config.geminiApiKey}`;
+
+  let contents = [];
+  if (chatHistory && Array.isArray(chatHistory)) {
+    contents = [...chatHistory];
+  }
+  contents.push({
+    role: "user",
+    parts: [{ text: finalUserPrompt }]
+  });
+
+  const requestBody = {
+    contents,
+    generationConfig: {
+      responseMimeType: "application/json"
+    }
+  };
+  if (finalSystemPrompt) {
+    requestBody.systemInstruction = {
+      parts: [{ text: finalSystemPrompt }]
+    };
+  }
 
   const requestPayload = {
-    url: `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiLabelModel}:generateContent?key=REDACTED_API_KEY`,
+    url: `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=REDACTED_API_KEY`,
     headers: { "Content-Type": "application/json" },
-    body: {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
-      ],
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    }
+    body: requestBody
   };
 
   const response = await fetch(url, {
@@ -261,6 +315,17 @@ async function labelWithGemini(config, video, folder, store) {
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
   const parsed = JSON.parse(text);
   const labelsRaw = Array.isArray(parsed) ? parsed : (parsed.labels || []);
+
+  if (chatHistory && Array.isArray(chatHistory)) {
+    chatHistory.push({
+      role: "user",
+      parts: [{ text: finalUserPrompt }]
+    });
+    chatHistory.push({
+      role: "model",
+      parts: [{ text }]
+    });
+  }
 
   const usage = json.usageMetadata || {};
   const stats = {
@@ -280,7 +345,7 @@ async function labelWithGemini(config, video, folder, store) {
     ...label,
     confidence: label.probability || 0,
     source: "gemini_llm_audio_roster_reasoning",
-    methodVersion: `gemini-${config.geminiLabelModel}-v1`
+    methodVersion: `gemini-${modelName}-v1`
   })));
 
   return { labels, usage: stats, request: requestPayload, response: json };

@@ -112,15 +112,34 @@
       <form method="dialog"><button>Close</button></form>
     </dialog>
 
-    <dialog id="settingsDialog" class="settingsDialog">
+    <dialog id="settingsDialog" class="settingsDialog" style="width: 600px; max-width: 90vw;">
       <div class="modalHeader">
-        <h2>LLM Prompt Settings</h2>
+        <h2>LLM Prompt & Model Settings</h2>
         <form method="dialog"><button>Close</button></form>
       </div>
       <div class="modalBody">
-        <p class="muted">Configure the system prompt used for Gemini LLM labeling. Supported macros: <code>{{roster}}</code>, <code>{{filename}}</code>, <code>{{transcript}}</code>, <code>{{venue}}</code>, <code>{{discipline}}</code>, <code>{{date}}</code>.</p>
-        <p class="muted small">Tip: Place stable macros like <code>{{roster}}</code> and event metadata at the <strong>top</strong> to optimize prompt caching.</p>
-        <textarea id="labelPromptInput" class="settingsTextarea" rows="18"></textarea>
+        <p class="muted">Configure the LLM settings, system prompt, and user prompt used for Gemini LLM labeling. Supported macros: <code>{{roster}}</code>, <code>{{filename}}</code>, <code>{{transcript}}</code>, <code>{{venue}}</code>, <code>{{discipline}}</code>, <code>{{date}}</code>.</p>
+        
+        <div style="margin-bottom: 16px;">
+          <label for="geminiLabelModelInput" style="display: block; font-weight: 500; font-size: 13px; margin-bottom: 6px; color: var(--accent-dark);">Gemini LLM Model</label>
+          <input id="geminiLabelModelInput" type="text" style="width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px;" placeholder="e.g. gemini-2.0-flash">
+        </div>
+
+        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px; background: #f6f8f8; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line);">
+          <input id="useUnifiedSessionInput" type="checkbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
+          <label for="useUnifiedSessionInput" style="font-weight: 500; font-size: 13px; cursor: pointer; color: var(--accent-dark);">Use unified multi-turn chat session for event labeling (sequential)</label>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label for="labelSystemPromptInput" style="display: block; font-weight: 500; font-size: 13px; margin-bottom: 6px; color: var(--accent-dark);">System Prompt Template</label>
+          <p class="muted small" style="margin-bottom: 8px;">Tip: Place stable macros like <code>{{roster}}</code> and event metadata at the <strong>top</strong> to optimize prompt caching.</p>
+          <textarea id="labelSystemPromptInput" class="settingsTextarea" rows="12"></textarea>
+        </div>
+
+        <div style="margin-bottom: 8px;">
+          <label for="labelUserPromptInput" style="display: block; font-weight: 500; font-size: 13px; margin-bottom: 6px; color: var(--accent-dark);">User Prompt Template</label>
+          <textarea id="labelUserPromptInput" class="settingsTextarea" rows="5"></textarea>
+        </div>
       </div>
       <div class="modalFooter">
         <button id="saveSettings" class="actionLink">Save Changes</button>

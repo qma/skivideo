@@ -12,7 +12,9 @@ const emptyStore = {
   jobs: [],
   teams: [],
   settings: {
-    labelPrompt: `Extract skier athlete names from a skiing video transcript. 
+    geminiLabelModel: "gemini-2.0-flash",
+    useUnifiedSession: false,
+    labelSystemPrompt: `Extract skier athlete names from a skiing video transcript. 
 Use the provided candidate roster as the canonical source for names and spellings. 
 The event venue is {{venue}}, discipline is {{discipline}}, and date is {{date}}.
 
@@ -30,9 +32,8 @@ Each object MUST have:
 "thought" (1-sentence reasoning why this athlete matches, e.g. "Transcript heard 'Zosia' which is a unique first name match for Zosia Buchanan"),
 "matchedRoster" (boolean).
 The "probability" values across all candidates in the list MUST sum to 1.0 (Bayesian normalization).
-Return COMPACT JSON ONLY. No preamble.
-
-Input Data:
+Return COMPACT JSON ONLY. No preamble.`,
+    labelUserPrompt: `Input Data:
 Filename: {{filename}}
 Transcript: {{transcript}}`
   }
