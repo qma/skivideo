@@ -171,8 +171,13 @@ select {
 .eventListHeader,
 .eventRow {
   display: grid;
-  grid-template-columns: 112px minmax(220px, 1fr) 146px 92px 132px 330px;
-  gap: 8px;
+  grid-template-columns:
+    100px
+    minmax(0, 1.6fr)
+    clamp(88px, 16%, 148px)
+    minmax(0, 1fr)
+    minmax(0, 1fr);
+  gap: 8px 12px;
   align-items: center;
 }
 
@@ -192,10 +197,11 @@ select {
 
 .eventRow {
   min-height: 48px;
-  padding: 7px 10px;
+  padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fbfcf9;
+  align-items: start;
 }
 
 .eventRow strong {
@@ -204,10 +210,15 @@ select {
 
 .eventDate,
 .eventName,
-.eventCounts {
+.eventCounts,
+.eventRow > div:nth-child(3) {
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.eventRow > div:nth-child(3) {
+  align-content: start;
 }
 
 .eventDate span,
@@ -220,6 +231,14 @@ select {
   white-space: nowrap;
 }
 
+/* Count sub-labels carry several stats; let them wrap instead of truncating. */
+.eventCounts span {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
 .eventName strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -227,9 +246,15 @@ select {
 }
 
 .eventActions {
+  grid-column: 1 / -1;
   display: flex;
-  justify-content: flex-end;
-  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
 }
 
 .eventActions button,
@@ -886,11 +911,12 @@ pre {
     align-items: start;
   }
 
-  .eventRow > div:nth-child(n+3) {
+  .eventRow > div:nth-child(n+3):not(.eventActions) {
     grid-column: 2;
   }
 
   .eventActions {
+    grid-column: 1 / -1;
     justify-content: flex-start;
     flex-wrap: wrap;
   }

@@ -243,7 +243,6 @@ function renderFolders() {
       <span>Status</span>
       <span>Videos</span>
       <span>Index</span>
-      <span>Actions</span>
     </div>
     ${folders.map((folder) => {
     const event = folder.eventMatch;
