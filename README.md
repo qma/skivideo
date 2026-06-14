@@ -28,19 +28,23 @@ The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_
 - Transcript source normalization.
 - Deterministic roster/transcript/filename athlete labeler.
 - Local-only relabeling from cached transcripts for prompt/rule iteration without media downloads.
-- Local Apple Silicon optimized MLX Whisper transcription hook.
-- Local whisper.cpp transcription fallback using `/opt/homebrew/bin/whisper-cli` and `data/models/ggml-base.en.bin`. GPU/Metal is the default when the installed whisper.cpp binary supports it; set `WHISPER_CPP_NO_GPU=1` or pass `--whisper-cpp-no-gpu` to force CPU-only `-ng` mode.
+- Local transcription with whisper.cpp by default (`/opt/homebrew/bin/whisper-cli` plus the configured `data/models/ggml-<size>.bin`, `medium` by default). GPU/Metal is enabled when the installed binary supports it; set `WHISPER_CPP_NO_GPU=1` or pass `--whisper-cpp-no-gpu` to force CPU-only `-ng` mode. The backend and model are configurable through `WHISPER_BACKEND` and `WHISPER_MODEL_SIZE`.
+- Apple Silicon optimized MLX Whisper is selected automatically when the `.venv` MLX runtime is importable and the configured whisper.cpp model is unavailable.
 - Optional event-aware transcription prompts for Whisper. Use `TRANSCRIPTION_PROMPT=1` or CLI `--transcription-prompt` to bias decoding toward ski phrases such as `run two` and Live-Timing roster names while preserving prompt metadata on transcript refs.
-- OpenAI transcription and labeler hooks as optional fallbacks when `OPENAI_API_KEY` is available.
+- LLM athlete labeling layered on top of the deterministic labeler. When `GEMINI_API_KEY` is set, Gemini fills in or augments labels (default mode `fallback`, only when heuristics find nothing; set `LLM_LABEL_MODE=always` to call it for every video). OpenAI is a secondary fallback when only `OPENAI_API_KEY` is set. LLM output is merged with high-confidence deterministic labels, and null answers such as "No Skier Identified" are filtered out.
+- LLM prompt and model settings are editable in the in-app Settings dialog (and `/api/settings`): the Gemini model, split system/user prompt templates with `{{roster}}`, `{{filename}}`, `{{transcript}}`, `{{venue}}`, `{{discipline}}`, and `{{date}}` macros, max concurrent jobs, and a unified multi-turn chat session mode that labels an event's videos sequentially in one conversation for better cross-video consistency and prompt caching. Each Gemini call records token usage, cache-hit rate, and estimated cost, inspectable per video via the Label Debug column and Inspect LLM button.
 - Event detail view with status/confidence filters, event-local search, Live-Timing assets, app playback links, source SharePoint links, and embedded local video players.
-- Event list actions are ordered by dependency with mouse-over tooltips: `View` ensures the SharePoint video list and opens the event table, `Live` refreshes race correlation, `Prepare` runs View/Live dependencies plus metadata relabeling, `Process` runs all dependencies before download/transcription/indexing with four workers by default, and `Re-Process` confirms before forced retranscription/relabeling from local media only.
+- Event list actions are ordered by dependency with mouse-over tooltips: `View` ensures the SharePoint video list and opens the event table, `Live` refreshes race correlation, `Prepare` runs View/Live dependencies plus metadata relabeling, `Relabel` reruns only athlete scoring from existing transcripts/rosters/filenames, `Process` runs all dependencies before download/transcription/indexing with four workers by default, `Re-Process` confirms before forced retranscription/relabeling from local media only, and `Reset` (after confirmation) clears the event's videos, labels, transcripts, jobs, and Live-Timing metadata back to discovered state without deleting local media files on disk.
 - Event review controls for roster-autocompleted golden athlete labels without media downloads. Golden labels are stored separately from model predictions and preferred for display/search.
 - Lazy web loading: startup reads `/api/summary`, selected events read `/api/event?folderId=...`, and global search reads `/api/search` instead of loading the full store into the browser.
 - Background processing from the web UI returns immediately and the Jobs panel refreshes while processing is running, so progress is visible without waiting on a single long HTTP response.
 - Jobs are color-coded by status and each job has an Inspect link backed by `/api/job`, with persisted progress logs available during and after processing.
+- Background jobs run through an in-process queue with configurable concurrency (`PROCESS_JOB_CONCURRENCY`, also editable in Settings); each job keeps its own worker parallelism (`parallel: 4` by default). Failed or errored jobs show a Rerun button backed by `/api/rerun-job-async`. Queued and interrupted-running jobs are reset and re-enqueued on server startup so in-flight work survives restarts and dev hot-reloads.
 - Optional Firestore metadata sync through Firebase service-account credentials.
 - App playback links in search results. Local videos use `/media/:videoId`; non-local videos link directly to the SharePoint source URL so the app server does not proxy video bytes.
+- SharePoint source links and per-team SharePoint root URLs live in a `teams` collection inside the store rather than hardcoded config, so multiple teams/sources can be registered with `upsert-team`/`list-teams`.
 - Static read-only Next.js public app in `apps/public-next/`, generated from an audited public export with no local media paths, download URLs, credentials, or job history.
+- In-admin public preview at `/public-preview/` renders the static public UI against live local metadata once `npm run public:build` has generated it at least once.
 
 ## Useful Commands
 
@@ -70,8 +74,12 @@ npm run public:audit
 npm run public:build
 npm run public:dev
 npm run cli -- audit-media-links
+npm run cli -- audit-public-export [path]
 npm run cli -- sync-metadata
 npm run cli -- search "Jane"
+npm run cli -- backends
+npm run cli -- upsert-team '{"id":"team_tpt_u14_2025_2026","name":"TPT U14","sharepointRootUrl":"https://..."}'
+npm run cli -- list-teams
 ```
 
 For the provided Team Palisades shared link, `list-sharepoint-rest` works without Graph credentials by establishing the anonymous shared-link SharePoint session and calling SharePoint REST endpoints. The current real validation folder is `GS Race Jan 9. Northstar. Day 1`, correlated to Live-Timing races `297661` (men) and `297652` (women).
@@ -126,7 +134,9 @@ SharePoint listing prefers Microsoft Graph. Configure either:
 - `GRAPH_ACCESS_TOKEN`, or
 - `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET`.
 
-Audio transcription uses local MLX Whisper on Apple Silicon when available. Install it with `scripts/install-whisper.sh`. If MLX cannot access Metal from the current runner, the app falls back to Homebrew `whisper-cli` with the configured ggml model under `data/models/`. `WHISPER_MODEL_SIZE` defaults to `medium`; run `scripts/download-models.sh` after changing it so the matching `ggml-<size>.bin` is present. If the configured model is missing, processing fails with a direct download instruction instead of silently using an older transcript. whisper.cpp uses GPU/Metal by default; use `WHISPER_CPP_NO_GPU=1` or CLI `--whisper-cpp-no-gpu` only when you need to disable GPU acceleration. OpenAI is optional fallback only when `OPENAI_API_KEY` is present. Without any transcription backend, the app still runs deterministic matching against existing transcripts, filenames, and event rosters.
+Audio transcription defaults to local Homebrew `whisper-cli` (whisper.cpp) with the configured ggml model under `data/models/`. `WHISPER_MODEL_SIZE` defaults to `medium`; run `scripts/download-models.sh` after changing it so the matching `ggml-<size>.bin` is present. If the configured whisper.cpp model is missing, the app prefers Apple Silicon MLX Whisper when its `.venv` runtime is importable, and otherwise fails with a direct download instruction instead of silently using an older transcript. Install MLX with `scripts/install-whisper.sh`. The backend can be pinned with `WHISPER_BACKEND` (`whisper.cpp`, `mlx`, or `openai`). whisper.cpp uses GPU/Metal by default; use `WHISPER_CPP_NO_GPU=1` or CLI `--whisper-cpp-no-gpu` only when you need to disable GPU acceleration. OpenAI transcription is used only when `WHISPER_BACKEND=openai` or it is the last available backend and `OPENAI_API_KEY` is present. Without any transcription backend, the app still runs deterministic and LLM matching against existing transcripts, filenames, and event rosters.
+
+Athlete labeling layers an optional LLM on top of the deterministic matcher. Set `GEMINI_API_KEY` to enable Gemini labeling (model `GEMINI_LABEL_MODEL`, editable in Settings; `LLM_LABEL_MODE=fallback` by default, `always` to label every video). `OPENAI_API_KEY` enables an OpenAI labeler as a secondary fallback. With no LLM key configured, labeling uses the deterministic roster/transcript/filename matcher alone.
 
 The installer also installs `imageio-ffmpeg`, which provides a static Apple Silicon `ffmpeg` fallback. This avoids depending on the local Homebrew `ffmpeg` install.
 
