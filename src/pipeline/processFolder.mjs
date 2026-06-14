@@ -172,7 +172,7 @@ export async function processFolder(config, store, folderId, options = {}) {
   await writeQueue;
 
   // Phase 2: Sequential LLM Labeling (Only when unified session is true)
-  if (useUnifiedSession && !failed) {
+  if (useUnifiedSession) {
     state = await store.read();
     const freshVideos = state.videos.filter((v) => v.folderId === folderId);
 
@@ -200,7 +200,7 @@ export async function processFolder(config, store, folderId, options = {}) {
       const bestConfidence = Math.max(0, ...athleteLabels.map((l) => Number(l.confidence) || 0));
       const processing = {
         ...(video.processing || {}),
-        status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
+        status: resolveLabeledStatus(video, bestConfidence),
         processedAt: nowIso()
       };
 
@@ -312,7 +312,7 @@ export async function relabelFolder(config, store, folderId, options = {}) {
       const bestConfidence = Math.max(0, ...athleteLabels.map((label) => Number(label.confidence) || 0));
       const processing = {
         ...(video.processing || {}),
-        status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
+        status: resolveLabeledStatus(video, bestConfidence),
         relabeledAt: nowIso()
       };
       await store.updateVideo(video.id, { athleteLabels, labelDebug, processing });
@@ -476,11 +476,16 @@ export async function processVideo(config, video, folder, options = {}, rootUrl 
   }
   const bestConfidence = Math.max(0, ...next.athleteLabels.map((label) => Number(label.confidence) || 0));
   next.processing = {
-    status: bestConfidence >= 0.65 ? "indexed" : "needs_review",
+    status: resolveLabeledStatus(next, bestConfidence),
     errors,
     processedAt: nowIso()
   };
   return next;
+}
+
+function resolveLabeledStatus(video, bestConfidence) {
+  if (video?.goldenLabel) return "indexed";
+  return bestConfidence >= 0.65 ? "indexed" : "needs_review";
 }
 
 async function lookupSharePointRootUrl(config, store, folder) {
