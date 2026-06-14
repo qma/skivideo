@@ -167,8 +167,13 @@
 - [codex] Fixed Live-Timing confirmation relabel behavior: confirm/no-live now queues relabel jobs through the same configurable background queue, duplicate relabel clicks for the same folder return the existing queued/running job, and the admin buttons disable/change text while confirmation is being submitted. Validated with two queued relabel jobs plus a duplicate request: one ran, one queued, duplicate reused the queued job.
 - [codex] Debugged `SL Race DP Feb 28th Bottom` zero-label issue: event had confirmed Live-Timing roster but 0 local videos, 0 audio, and 0 transcripts, so Relabel and local-only Re-Process had no evidence. Started the actual Process workflow (`job_3752a9fb874048df`), which downloaded/transcribed all 121 videos and completed with 41 indexed, 80 review, 0 failed. Clarified Re-Process UI copy to say it does not download missing media.
 
+## Bugs
+
+- [ ] [BUG][high] Golden-label videos are demoted from `indexed` back to `needs_review` by Relabel / Process / Re-Process. `reviewVideo` (manual-label in `src/server.mjs`) sets `goldenLabel` and `processing.status = "indexed"`, but `relabelFolder`, `processVideo`, and the unified-session labeling phase in `src/pipeline/processFolder.mjs` recompute `processing.status` purely from `athleteLabels` prediction confidence and ignore `goldenLabel`. Reproduced live: set a golden label on `P1020609.MP4` (GS Camp April 24), relabeled the folder, and the status flipped to `needs_review` even though the golden label was retained — corrupting the indexed/review counts and review workflow. Fix: treat a present `goldenLabel` as `indexed` in all three status computations.
+- [ ] [BUG][medium] Unified multi-turn session labeling is skipped for the entire event when any single video fails ingestion. `processFolder` in `src/pipeline/processFolder.mjs` guards phase 2 with `if (useUnifiedSession && !failed)`, so one failed download/transcription leaves every non-failed video unlabeled and stuck in `needs_review` (they were ingested with `skipLabeling: true`). The phase-2 loop already skips per-video failures (`if (video.processing?.status === "failed") continue;`), so the `&& !failed` guard should be dropped.
+
 ## In Progress
-- None.
+- [claude] Fixing the two labeling-pipeline bugs above via subagent. README refreshed to document Gemini LLM labeling, the Settings UI, the background job queue, and teams metadata.
 
 ## Next
 
