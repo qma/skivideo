@@ -172,12 +172,13 @@ select {
 .eventRow {
   display: grid;
   grid-template-columns:
-    100px
-    minmax(0, 1.6fr)
-    clamp(88px, 16%, 148px)
-    minmax(0, 1fr)
-    minmax(0, 1fr);
-  gap: 8px 12px;
+    minmax(78px, 0.6fr)
+    minmax(0, 1.7fr)
+    minmax(112px, 1.8fr)
+    minmax(0, 0.85fr)
+    minmax(0, 0.85fr)
+    auto;
+  gap: 8px;
   align-items: center;
 }
 
@@ -197,28 +198,23 @@ select {
 
 .eventRow {
   min-height: 48px;
-  padding: 9px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fbfcf9;
-  align-items: start;
 }
 
 .eventRow strong {
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .eventDate,
 .eventName,
-.eventCounts,
-.eventRow > div:nth-child(3) {
+.eventCounts {
   display: grid;
   gap: 2px;
   min-width: 0;
-}
-
-.eventRow > div:nth-child(3) {
-  align-content: start;
 }
 
 .eventDate span,
@@ -231,12 +227,10 @@ select {
   white-space: nowrap;
 }
 
-/* Count sub-labels carry several stats; let them wrap instead of truncating. */
-.eventCounts span {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  line-height: 1.35;
+/* Status cell can shrink; the badge ellipsises within it. */
+.eventRow > div:nth-child(3),
+.eventListHeader > span:nth-child(3) {
+  min-width: 0;
 }
 
 .eventName strong {
@@ -246,15 +240,102 @@ select {
 }
 
 .eventActions {
-  grid-column: 1 / -1;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 6px;
-  min-width: 0;
-  margin-top: 4px;
-  padding-top: 9px;
-  border-top: 1px solid var(--line);
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.iconAction {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.iconAction:hover {
+  background: #eef5f4;
+  border-color: var(--accent);
+}
+
+.iconAction.is-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.iconAction.is-primary:hover {
+  background: var(--accent-dark);
+}
+
+.iconAction.is-reset {
+  border-color: #e4b8b8;
+  background: #fff7e8;
+  color: #8a5b00;
+}
+
+.iconAction.is-reset:hover {
+  background: #ffefd1;
+}
+
+.ico {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.iconAction::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #1f2a2a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 40;
+}
+
+.iconAction::before {
+  content: "";
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1f2a2a;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 40;
+}
+
+.iconAction:hover::after,
+.iconAction:hover::before,
+.iconAction:focus-visible::after,
+.iconAction:focus-visible::before {
+  opacity: 1;
 }
 
 .eventActions button,
@@ -297,17 +378,18 @@ select {
 }
 
 .statusBadge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  width: max-content;
-  max-width: 140px;
-  padding: 0 8px;
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
   font-size: 12px;
   font-weight: 700;
+  line-height: 18px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
 }
 
 .statusProcessed {
@@ -889,7 +971,7 @@ pre {
   box-shadow: 0 0 0 2px rgba(13, 107, 104, 0.1);
 }
 
-@media (max-width: 800px) {
+@media (max-width: 860px) {
   .topbar,
   .sectionHead,
   .actions,
@@ -919,6 +1001,7 @@ pre {
     grid-column: 1 / -1;
     justify-content: flex-start;
     flex-wrap: wrap;
+    margin-top: 6px;
   }
 
   .eventTools {

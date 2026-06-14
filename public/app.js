@@ -234,6 +234,11 @@ function renderStatus() {
   el("statusLine").textContent = `${folders} folders, ${videos} videos, ${labels} labels. ${backend}.`;
 }
 
+function eventActionButton(action, icon, label, folderId) {
+  const variant = action === "view" ? "is-primary" : action === "reset" ? "is-reset" : "is-subtle";
+  return `<a class="iconAction ${variant}" href="${escapeAttr(actionHref(action, folderId))}" onclick="handleEventAction(event, '${action}', '${escapeAttr(folderId)}')" data-tip="${escapeAttr(label)}" aria-label="${escapeAttr(`${label}. ${actionTips[action]}`)}"><svg class="ico" aria-hidden="true"><use href="#${icon}"/></svg></a>`;
+}
+
 function renderFolders() {
   const folders = [...state.summary.folders].sort(compareFoldersChronologically);
   el("folders").innerHTML = folders.length ? `
@@ -243,6 +248,7 @@ function renderFolders() {
       <span>Status</span>
       <span>Videos</span>
       <span>Index</span>
+      <span>Actions</span>
     </div>
     ${folders.map((folder) => {
     const event = folder.eventMatch;
@@ -254,29 +260,29 @@ function renderFolders() {
           <strong>${escapeHtml(eventDateLabel(folder))}</strong>
           <span>${escapeHtml(event?.discipline || "")}</span>
         </div>
-        <div class="eventName">
+        <div class="eventName" title="${escapeAttr(folder.name)}">
           <strong>${escapeHtml(folder.name)}</strong>
           <span>${escapeHtml([event?.venue, event?.liveTimingSelection?.status === "needs_admin_selection" ? "Live-Timing needs confirmation" : "", folder.raceAssetCount ? `${folder.raceAssetCount} assets` : "", folder.candidateRosterCount ? `${folder.candidateRosterCount} racers` : ""].filter(Boolean).join(" · "))}</span>
         </div>
-        <div>
+        <div title="${escapeAttr(status.label)}">
           <span class="statusBadge ${status.className}">${escapeHtml(status.label)}</span>
         </div>
-        <div class="eventCounts">
+        <div class="eventCounts" title="${escapeAttr(`${stats.localVideo || 0} playable · ${stats.localVideoRefs || 0} refs · ${stats.transcripts || 0} transcripts`)}">
           <strong>${stats.videoCount || 0}</strong>
-          <span>${stats.localVideo || 0} playable · ${stats.localVideoRefs || 0} refs · ${stats.transcripts || 0} tx</span>
+          <span>${stats.localVideo || 0} playable</span>
         </div>
-        <div class="eventCounts">
+        <div class="eventCounts" title="${escapeAttr(`${stats.indexed || 0} indexed · ${stats.needsReview || 0} review · ${stats.failed || 0} failed`)}">
           <strong>${stats.indexed || 0}/${stats.videoCount || 0}</strong>
-          <span>${stats.needsReview || 0} review · ${stats.failed || 0} failed</span>
+          <span>${stats.needsReview || 0} review${stats.failed ? ` · ${stats.failed} failed` : ""}</span>
         </div>
         <div class="eventActions">
-          <a class="actionLink" href="${escapeAttr(actionHref("view", folder.id))}" onclick="handleEventAction(event, 'view', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.view)}" aria-label="${escapeAttr(actionTips.view)}">View</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("live", folder.id))}" onclick="handleEventAction(event, 'live', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.live)}" aria-label="${escapeAttr(actionTips.live)}">Live</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("prepare", folder.id))}" onclick="handleEventAction(event, 'prepare', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.prepare)}" aria-label="${escapeAttr(actionTips.prepare)}">Prepare</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("relabel", folder.id))}" onclick="handleEventAction(event, 'relabel', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.relabel)}" aria-label="${escapeAttr(actionTips.relabel)}">Relabel</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("process", folder.id))}" onclick="handleEventAction(event, 'process', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.process)}" aria-label="${escapeAttr(actionTips.process)}">Process</a>
-          <a class="actionLink subtleActionLink" href="${escapeAttr(actionHref("reprocess", folder.id))}" onclick="handleEventAction(event, 'reprocess', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.reprocess)}" aria-label="${escapeAttr(actionTips.reprocess)}">Re-Process</a>
-          <a class="actionLink resetActionLink" href="${escapeAttr(actionHref("reset", folder.id))}" onclick="handleEventAction(event, 'reset', '${escapeAttr(folder.id)}')" title="${escapeAttr(actionTips.reset)}" aria-label="${escapeAttr(actionTips.reset)}">Reset</a>
+          ${eventActionButton("view", "i-view", "View", folder.id)}
+          ${eventActionButton("live", "i-live", "Live", folder.id)}
+          ${eventActionButton("prepare", "i-prepare", "Prepare", folder.id)}
+          ${eventActionButton("relabel", "i-relabel", "Relabel", folder.id)}
+          ${eventActionButton("process", "i-process", "Process", folder.id)}
+          ${eventActionButton("reprocess", "i-reprocess", "Re-Process", folder.id)}
+          ${eventActionButton("reset", "i-reset", "Reset", folder.id)}
         </div>
       </article>
     `;
