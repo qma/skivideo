@@ -518,6 +518,13 @@ app.use("/public-preview", (req, res) => {
   res.sendFile(indexPath);
 });
 
+// Live public view: the public projection rendered directly by this server from
+// public-view/, consuming the live /data/lean-index.json (no static build needed).
+// NOTE: this is the preview of the public data shape, NOT a security boundary yet
+// — admin APIs still share this origin until role-based auth lands
+// (see docs/PUBLIC_VIEW_PLAN.md).
+app.use("/public", express.static(path.join(config.rootDir, "public-view")));
+
 app.get("/media/:videoId", asyncRoute(async (req, res) => serveMedia(req, res, req.params.videoId)));
 app.use(express.static(path.join(config.rootDir, "public")));
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
