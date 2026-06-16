@@ -39,7 +39,7 @@ function renderShell() {
   const team = (idx.teams || [])[0] || {};
   const totalIndexed = videos.filter((v) => v.processing && v.processing.status === "indexed").length;
   const withNames = videos.filter((v) => v.goldenLabel || (v.athleteLabels && v.athleteLabels.length)).length;
-  const rootShareUrl = team.sharepointRootUrl || "";
+  const teamFolderUrl = team.folderUrl || team.sharepointRootUrl || "";
 
   app.innerHTML = `
     <header class="topbar">
@@ -61,10 +61,10 @@ function renderShell() {
       ${metric("With Names", withNames)}
     </section>
 
-    ${rootShareUrl ? `
+    ${teamFolderUrl ? `
     <section class="sharepointNotice">
       <p>SharePoint may ask you to sign in until your browser has opened the public team folder once. Open it once, then video links open directly.</p>
-      <a href="${esc(rootShareUrl)}" rel="noreferrer" target="_blank">Open Public Team Folder</a>
+      <a href="${esc(teamFolderUrl)}" rel="noreferrer" target="_blank">Open Public Team Folder</a>
     </section>` : ""}
 
     <section class="searchRow" aria-label="Search controls">

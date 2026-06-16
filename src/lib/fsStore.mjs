@@ -351,13 +351,48 @@ export function buildPublicLeanStore(store) {
       playbackPolicy: "direct_source_links",
       mediaHosted: false
     },
-    teams: store.teams || [],
+    teams: (store.teams || []).map((team) => sanitizePublicTeam(team, folders)),
     folders: folders
       .map((folder) => sanitizePublicFolder(folder, folderStats.get(folder.id), publicLinks.folderUrl(folder)))
       .sort((a, b) => String(a.eventDate || a.name).localeCompare(String(b.eventDate || b.name))),
     videos,
     events: (store.events || []).map(sanitizePublicEvent)
   };
+}
+
+function sanitizePublicTeam(team, folders) {
+  const serverRelativeUrl = team.serverRelativeUrl || deriveTeamRootServerRelativeUrl(team.id, folders);
+  return {
+    id: team.id || "",
+    name: team.name || "",
+    orgName: team.orgName || "",
+    season: team.season || "",
+    aliases: team.aliases || [],
+    sharepointRootUrl: team.sharepointRootUrl || "",
+    // Expose only the ready-to-use folder link, not the raw server-relative path
+    // (the path is already inside folderUrl; the audit blocks bare path keys).
+    folderUrl: publicSharePointViewUrl(team.sharepointRootUrl, serverRelativeUrl, "folder")
+  };
+}
+
+// Best-effort team root folder path: the longest common parent of the team's
+// event folders' server-relative URLs. Used to build a working public folder
+// link (with the share token) when a team has no explicit serverRelativeUrl set.
+function deriveTeamRootServerRelativeUrl(teamId, folders) {
+  const segLists = (folders || [])
+    .filter((folder) => folder.serverRelativeUrl && (!folder.teamId || folder.teamId === teamId))
+    .map((folder) => folder.serverRelativeUrl.split("/").filter(Boolean));
+  if (!segLists.length) return "";
+  let common = segLists[0];
+  for (const segs of segLists.slice(1)) {
+    let i = 0;
+    while (i < common.length && i < segs.length && common[i] === segs[i]) i += 1;
+    common = common.slice(0, i);
+  }
+  // Each folder path is <team-root>/<event>; for a single folder drop its own
+  // last segment to reach the parent root.
+  if (segLists.length === 1) common = common.slice(0, -1);
+  return common.length ? `/${common.join("/")}` : "";
 }
 
 export function auditPublicLeanStore(lean) {

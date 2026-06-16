@@ -63,7 +63,7 @@ export default function PublicIndexPage() {
 
   const totalIndexed = videos.filter((video) => video.processing?.status === "indexed").length;
   const labeledVideos = videos.filter((video) => video.goldenLabel || video.athleteLabels?.length).length;
-  const rootShareUrl = index?.teams?.[0]?.sharepointRootUrl || "";
+  const rootShareUrl = index?.teams?.[0]?.folderUrl || index?.teams?.[0]?.sharepointRootUrl || "";
 
   if (error) {
     return (

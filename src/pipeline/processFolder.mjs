@@ -489,9 +489,8 @@ function resolveLabeledStatus(video, bestConfidence) {
 }
 
 async function lookupSharePointRootUrl(config, store, folder) {
-  if (config.sharepointRootUrl && !config.sharepointRootUrl.includes("<tenant>")) {
-    return config.sharepointRootUrl;
-  }
+  // Team object is the source of truth for the SharePoint root; the global
+  // config value is only a fallback for teams that have none set yet.
   const state = await store.read();
   const teamId = folder.teamId || state.teams[0]?.id;
   const team = state.teams.find((t) => t.id === teamId);
