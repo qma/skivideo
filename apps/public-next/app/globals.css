@@ -5,7 +5,8 @@
   --line: #d9e1e8;
   --soft: #f5f7f9;
   --panel: #ffffff;
-  --blue: #1f6feb;
+  --blue: #0d6b68;
+  --blue-dark: #064d4b;
   --green: #16845b;
   --amber: #a55b00;
   --shadow: 0 12px 30px rgba(24, 33, 43, 0.08);
@@ -191,7 +192,7 @@ input:focus,
 select:focus,
 button:focus-visible,
 a:focus-visible {
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.18);
+  box-shadow: 0 0 0 3px rgba(13, 107, 104, 0.18);
   outline: 2px solid var(--blue);
   outline-offset: 1px;
 }
@@ -245,9 +246,13 @@ a:focus-visible {
   text-align: left;
 }
 
-.eventRow:hover,
+.eventRow:hover {
+  background: var(--soft);
+}
+
 .eventRow.selected {
-  background: #eaf2ff;
+  background: #eaf5ef;
+  box-shadow: inset 3px 0 0 var(--blue);
 }
 
 .eventDate,
@@ -363,9 +368,17 @@ a:focus-visible {
   text-decoration: none;
 }
 
+.videoActions a:hover {
+  background: var(--blue-dark);
+}
+
 .videoActions a.secondary {
-  background: #eef2f5;
-  color: var(--ink);
+  background: #eef4f3;
+  color: var(--blue-dark);
+}
+
+.videoActions a.secondary:hover {
+  background: #e1ece9;
 }
 
 .notice,
