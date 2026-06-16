@@ -44,7 +44,9 @@ The original design and execution plan lives in [docs/DESIGN_AND_IMPLEMENTATION_
 - App playback links in search results. Local videos use `/media/:videoId`; non-local videos link directly to the SharePoint source URL so the app server does not proxy video bytes.
 - SharePoint source links and per-team SharePoint root URLs live in a `teams` collection inside the store rather than hardcoded config, so multiple teams/sources can be registered with `upsert-team`/`list-teams`.
 - Static read-only Next.js public app in `apps/public-next/`, generated from an audited public export with no local media paths, download URLs, credentials, or job history.
-- In-admin public preview at `/public-preview/` renders the static public UI against live local metadata once `npm run public:build` has generated it at least once.
+- Live in-server public view at `/public/` rendered directly by the Express server from the audited public projection (`buildPublicLeanStore`) — no build step, always reflects current data. It is a preview of the public data shape, not yet a security boundary (see [docs/PUBLIC_VIEW_PLAN.md](docs/PUBLIC_VIEW_PLAN.md) for the planned tiered-login model).
+- In-admin static preview at `/public-preview/` renders the static Next.js public UI against live local metadata once `npm run public:build` has generated it at least once.
+- Forward plan for publishing the whole webapp with tiered logins (anonymous / team member / admin) and per-role data projections is documented in [docs/PUBLIC_VIEW_PLAN.md](docs/PUBLIC_VIEW_PLAN.md).
 
 ## Useful Commands
 
